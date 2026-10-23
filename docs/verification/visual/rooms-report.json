@@ -1,0 +1,102 @@
+{
+  "metrics": [
+    {
+      "room": "living",
+      "fps": "3",
+      "calls": "257",
+      "triangles": "16638"
+    },
+    {
+      "room": "kitchen",
+      "fps": "7",
+      "calls": "229",
+      "triangles": "17238"
+    },
+    {
+      "room": "dining",
+      "fps": "7",
+      "calls": "303",
+      "triangles": "18772"
+    },
+    {
+      "room": "hall",
+      "fps": "6",
+      "calls": "256",
+      "triangles": "14542"
+    },
+    {
+      "room": "wc",
+      "fps": "9",
+      "calls": "102",
+      "triangles": "9330"
+    },
+    {
+      "room": "garage",
+      "fps": "10",
+      "calls": "152",
+      "triangles": "7428"
+    },
+    {
+      "room": "front",
+      "fps": "7",
+      "calls": "632",
+      "triangles": "55904"
+    },
+    {
+      "room": "yard",
+      "fps": "10",
+      "calls": "143",
+      "triangles": "16036"
+    },
+    {
+      "room": "upstairs",
+      "fps": "5",
+      "calls": "252",
+      "triangles": "13938"
+    },
+    {
+      "room": "parents",
+      "fps": "5",
+      "calls": "218",
+      "triangles": "20504"
+    },
+    {
+      "room": "bart",
+      "fps": "6",
+      "calls": "136",
+      "triangles": "13876"
+    },
+    {
+      "room": "lisa",
+      "fps": "7",
+      "calls": "217",
+      "triangles": "20350"
+    },
+    {
+      "room": "maggie",
+      "fps": "6",
+      "calls": "209",
+      "triangles": "25126"
+    },
+    {
+      "room": "bathroom",
+      "fps": "11",
+      "calls": "96",
+      "triangles": "8962"
+    },
+    {
+      "room": "basement",
+      "fps": "10",
+      "calls": "162",
+      "triangles": "5080"
+    },
+    {
+      "room": "attic",
+      "fps": "8",
+      "calls": "179",
+      "triangles": "9766"
+    }
+  ],
+  "errors": [],
+  "note": "Software WebGL; visual/functional review, not target hardware benchmark"
+}

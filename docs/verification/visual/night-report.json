@@ -1,0 +1,18 @@
+{
+  "metrics": [
+    {
+      "room": "living",
+      "fps": "3",
+      "calls": "253",
+      "triangles": "15230"
+    },
+    {
+      "room": "front",
+      "fps": "3",
+      "calls": "612",
+      "triangles": "48864"
+    }
+  ],
+  "errors": [],
+  "note": "Software WebGL; visual/functional review, not target hardware benchmark"
+}

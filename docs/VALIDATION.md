@@ -1,5 +1,7 @@
 # Verificação da entrega — 23/10/2026
 
+Relatório da base funcional. Para as alterações e capturas da revisão visual posterior, consulte [VISUAL.md](VISUAL.md).
+
 Versão local funcional, com escopo avançado ainda parcial. Fontes preservados na tag `recovered-baseline`; correções posteriores em commits separados. A recuperação não incluiu o banco/cache do executor anterior.
 
 ## Resultados

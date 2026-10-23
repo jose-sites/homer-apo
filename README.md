@@ -38,6 +38,10 @@ O projeto funciona sem chaves de API: conversa por regras locais, legenda, efeit
 6. No modo Semiautomático, aprove ações em **Memória e ações**. No Automático, o motor executa decisões permitidas, respeitando intervalos e condições.
 7. **Pausar tudo** congela decisões, navegação, eventos e temporizadores do motor. Após reinício, o servidor recupera configurações em pausa; atividades transitórias não são repetidas.
 
+## Revisão visual
+
+Os 16 ambientes receberam cores vibrantes, iluminação quente, móveis e decoração adicionais, preservando planta e navegação. Veja [a revisão visual e as capturas](docs/VISUAL.md).
+
 ## O que está implementado
 
 - React + Vite + TypeScript, Zustand, Express, WebSocket e SQLite nativo, com módulos separados.

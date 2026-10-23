@@ -1,0 +1,36 @@
+{
+  "metrics": [
+    {
+      "room": "living",
+      "fps": "4",
+      "calls": "257",
+      "triangles": "16638"
+    },
+    {
+      "room": "kitchen",
+      "fps": "3",
+      "calls": "229",
+      "triangles": "17238"
+    },
+    {
+      "room": "front",
+      "fps": "2",
+      "calls": "632",
+      "triangles": "55904"
+    },
+    {
+      "room": "yard",
+      "fps": "4",
+      "calls": "143",
+      "triangles": "16036"
+    },
+    {
+      "room": "parents",
+      "fps": "4",
+      "calls": "218",
+      "triangles": "20504"
+    }
+  ],
+  "errors": [],
+  "note": "Software WebGL; visual/functional review, not target hardware benchmark"
+}

@@ -14,7 +14,7 @@ export default function HouseScene(props:Props){
  const [fade,setFade]=useState(false);const quality=props.state.settings.quality;const container=useRef<HTMLDivElement>(null);
  const report=(metrics:SceneMetrics)=>{if(container.current){container.current.dataset.drawCalls=String(metrics.drawCalls);container.current.dataset.triangles=String(metrics.triangles);container.current.dataset.fps=String(metrics.fps);}props.onMetrics?.(metrics);};
  return <div ref={container} className="house-scene" style={{width:'100%',height:'100%',position:'relative',overflow:'hidden',background:'#202d33'}}>
-  <Canvas shadows={quality!=='low'} dpr={quality==='low'?1:quality==='high'?[1,1.75]:[1,1.35]} camera={{position:[0,2.2,3.6],fov:55,near:.08,far:90}} gl={{antialias:quality!=='low',powerPreference:'high-performance'}} onCreated={({gl})=>{gl.setClearColor('#71878b');gl.toneMappingExposure=1.12;gl.shadowMap.autoUpdate=false;gl.shadowMap.needsUpdate=true;}}>
+  <Canvas shadows={quality!=='low'} dpr={quality==='low'?1:quality==='high'?[1,1.75]:[1,1.35]} camera={{position:[0,2.2,3.6],fov:55,near:.08,far:90}} gl={{antialias:quality!=='low',powerPreference:'high-performance'}} onCreated={({gl})=>{gl.setClearColor('#71878b');gl.toneMappingExposure=1.0;gl.shadowMap.autoUpdate=false;gl.shadowMap.needsUpdate=true;}}>
    <Suspense fallback={null}><World {...props} onMetrics={report} onFade={setFade}/></Suspense>
   </Canvas>
   <div aria-hidden="true" style={{position:'absolute',inset:0,pointerEvents:'none',background:'#151b1b',opacity:fade?1:0,transition:'opacity 180ms ease'}}/>
@@ -35,10 +35,10 @@ function World({state,onAction,onMetrics,explore,onCameraPose,onFade}:Props&{onF
   return ROOMS.filter(r=>ids.has(r.id));
  },[room,exterior,state.movement]);
  return <>
-  <color attach="background" args={[night?'#182e43':'#a6bbb6']}/><fog attach="fog" args={[night?'#182e43':'#a6bbb6',38,85]}/>
-  <ambientLight intensity={state.power?(night?.75:1.05):.2} color={night?'#c5ccd7':'#fff0d9'}/>
-  <hemisphereLight args={['#e7dfc5','#8c7356',state.power?1.6:.4]}/>
-  <directionalLight position={[7,14,9]} intensity={night?.35:2.3} color={night?'#a2c0e1':'#ffddb0'} castShadow={state.settings.quality!=='low'} shadow-mapSize={state.settings.quality==='high'?[1024,1024]:[512,512]} shadow-camera-left={-18} shadow-camera-right={18} shadow-camera-top={18} shadow-camera-bottom={-18} shadow-camera-far={45} shadow-bias={-.001}/>
+  <color attach="background" args={[night?'#182e43':'#62c9ec']}/><fog attach="fog" args={[night?'#182e43':'#62c9ec',38,85]}/>
+  <ambientLight intensity={state.power?(night?.35:.55):.12} color={night?'#c5ccd7':'#fff0d9'}/>
+  <hemisphereLight args={['#d6f0ff','#9c637d',state.power?.85:.2]}/>
+  <directionalLight position={[7,14,9]} intensity={night?.25:2.1} color={night?'#a2c0e1':'#fff0d5'} castShadow={state.settings.quality!=='low'} shadow-mapSize={state.settings.quality==='high'?[1024,1024]:[512,512]} shadow-camera-left={-18} shadow-camera-right={18} shadow-camera-top={18} shadow-camera-bottom={-18} shadow-camera-far={45} shadow-bias={-.001}/>
   {visible.map(r=><group key={r.id}><RoomShell room={r} state={state} onAction={onAction} activeRoom={detailedRoom} visibleRoomIds={visible.map(v=>v.id)}/>{r.id===detailedRoom?<RoomContents room={r} state={state} onAction={onAction}/>:['hall','basement'].includes(r.kind)&&<group position={r.origin}><Stairs level={r.floor}/></group>}</group>)}
   <SceneUpdates state={state} fallbackRoom={room.id} onTravelRoom={setTravelRoom}/>
   {exterior&&<Facade night={night}/>}
