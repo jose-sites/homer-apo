@@ -5,15 +5,17 @@ import { MathUtils, PerspectiveCamera, Vector3, Color, BufferGeometry, Float32Bu
 import type { Action, LiveState, Vec3 } from '../../shared/types';
 import { ROOMS, CAMERAS } from '../../shared/data';
 import { RoomShell, Facade } from './RoomShell';
-import { RoomContents } from './RoomContents';
+import { RoomContents, Stairs } from './RoomContents';
+import { currentTravelRoom } from './sceneLayout';
 
 export interface SceneMetrics {fps:number;drawCalls:number;triangles:number;memory:number|null}
 interface Props {state:LiveState;onAction:(action:Action)=>void;onMetrics?:(metrics:SceneMetrics)=>void;explore?:boolean;onCameraPose?:(position:Vec3,target:Vec3)=>void}
 export default function HouseScene(props:Props){
- const [fade,setFade]=useState(false);const quality=props.state.settings.quality;
- return <div className="house-scene" style={{width:'100%',height:'100%',position:'relative',overflow:'hidden',background:'#202d33'}}>
-  <Canvas shadows={quality!=='low'} dpr={quality==='low'?1:quality==='high'?[1,1.75]:[1,1.35]} camera={{position:[0,2.2,3.6],fov:55,near:.08,far:90}} gl={{antialias:quality!=='low',powerPreference:'high-performance'}} onCreated={({gl})=>{gl.setClearColor('#71878b');gl.toneMappingExposure=1.12;}}>
-   <Suspense fallback={null}><World {...props} onFade={setFade}/></Suspense>
+ const [fade,setFade]=useState(false);const quality=props.state.settings.quality;const container=useRef<HTMLDivElement>(null);
+ const report=(metrics:SceneMetrics)=>{if(container.current){container.current.dataset.drawCalls=String(metrics.drawCalls);container.current.dataset.triangles=String(metrics.triangles);container.current.dataset.fps=String(metrics.fps);}props.onMetrics?.(metrics);};
+ return <div ref={container} className="house-scene" style={{width:'100%',height:'100%',position:'relative',overflow:'hidden',background:'#202d33'}}>
+  <Canvas shadows={quality!=='low'} dpr={quality==='low'?1:quality==='high'?[1,1.75]:[1,1.35]} camera={{position:[0,2.2,3.6],fov:55,near:.08,far:90}} gl={{antialias:quality!=='low',powerPreference:'high-performance'}} onCreated={({gl})=>{gl.setClearColor('#71878b');gl.toneMappingExposure=1.12;gl.shadowMap.autoUpdate=false;gl.shadowMap.needsUpdate=true;}}>
+   <Suspense fallback={null}><World {...props} onMetrics={report} onFade={setFade}/></Suspense>
   </Canvas>
   <div aria-hidden="true" style={{position:'absolute',inset:0,pointerEvents:'none',background:'#151b1b',opacity:fade?1:0,transition:'opacity 180ms ease'}}/>
   <div aria-hidden="true" style={{position:'absolute',inset:0,pointerEvents:'none',boxShadow:'inset 0 0 80px #301f2025'}}/>
@@ -22,7 +24,8 @@ export default function HouseScene(props:Props){
 function World({state,onAction,onMetrics,explore,onCameraPose,onFade}:Props&{onFade:(value:boolean)=>void}){
  const active=state.cameras.find(c=>c.id===state.cameraId)||CAMERAS[0];
  const room=ROOMS.find(r=>r.id===active.room)||ROOMS[0];const night=state.virtualHour<6||state.virtualHour>18;
- const exterior=room.kind==='exterior';
+ const exterior=room.kind==='exterior';const [travelRoom,setTravelRoom]=useState(room.id);
+ const detailedRoom=state.movement?travelRoom:room.id;
  const visible=useMemo(()=>{
   if(exterior)return ROOMS.filter(r=>r.floor>=0&&r.floor<2&&!['yard','bathroom'].includes(r.id));
   const ids=new Set([room.id,...room.neighbors]);
@@ -36,13 +39,23 @@ function World({state,onAction,onMetrics,explore,onCameraPose,onFade}:Props&{onF
   <ambientLight intensity={state.power?(night?.75:1.05):.2} color={night?'#c5ccd7':'#fff0d9'}/>
   <hemisphereLight args={['#e7dfc5','#8c7356',state.power?1.6:.4]}/>
   <directionalLight position={[7,14,9]} intensity={night?.35:2.3} color={night?'#a2c0e1':'#ffddb0'} castShadow={state.settings.quality!=='low'} shadow-mapSize={state.settings.quality==='high'?[1024,1024]:[512,512]} shadow-camera-left={-18} shadow-camera-right={18} shadow-camera-top={18} shadow-camera-bottom={-18} shadow-camera-far={45} shadow-bias={-.001}/>
-  {visible.map(r=><group key={r.id}><RoomShell room={r} state={state} onAction={onAction}/>{(!exterior||['living','garage'].includes(r.id))&&<RoomContents room={r} state={state} onAction={onAction}/>}</group>)}
+  {visible.map(r=><group key={r.id}><RoomShell room={r} state={state} onAction={onAction} activeRoom={detailedRoom} visibleRoomIds={visible.map(v=>v.id)}/>{r.id===detailedRoom?<RoomContents room={r} state={state} onAction={onAction}/>:['hall','basement'].includes(r.kind)&&<group position={r.origin}><Stairs level={r.floor}/></group>}</group>)}
+  <SceneUpdates state={state} fallbackRoom={room.id} onTravelRoom={setTravelRoom}/>
   {exterior&&<Facade night={night}/>}
   {state.weather==='rain'&&<Rain origin={room.origin} paused={state.paused}/>}
   <Director state={state} explore={Boolean(explore)} onCameraPose={onCameraPose} onFade={onFade}/>
   {explore&&!state.movement&&<OrbitControls makeDefault target={[room.origin[0],room.origin[1]+1.3,room.origin[2]-1]} maxPolarAngle={Math.PI*.75} minPolarAngle={.25} minDistance={.8} maxDistance={exterior?36:7} enableDamping dampingFactor={.08}/>}
   <Metrics onMetrics={onMetrics} adaptive={state.settings.adaptiveQuality} quality={state.settings.quality}/>
  </>
+}
+function SceneUpdates({state,fallbackRoom,onTravelRoom}:{state:LiveState;fallbackRoom:string;onTravelRoom:(room:string)=>void}){
+ const {gl,camera}=useThree();const last=useRef(0);const reported=useRef(fallbackRoom);
+ const doorState=JSON.stringify(state.doors);const movementId=state.movement?.startedAt;const shadowsUntil=useRef(0);
+ useEffect(()=>{gl.shadowMap.needsUpdate=true;shadowsUntil.current=performance.now()+1000;},[gl,state.cameraId,state.power,doorState,state.settings.quality,movementId]);
+ useFrame(()=>{if(performance.now()<shadowsUntil.current)gl.shadowMap.needsUpdate=true;});
+ useFrame(({clock})=>{if(!state.movement||clock.elapsedTime-last.current<.25)return;last.current=clock.elapsedTime;
+  const next=currentTravelRoom([camera.position.x,camera.position.y-1.68,camera.position.z],reported.current);if(next!==reported.current){reported.current=next;onTravelRoom(next);gl.shadowMap.needsUpdate=true;}
+ });return null;
 }
 function Director({state,explore,onCameraPose,onFade}:{state:LiveState;explore:boolean;onCameraPose?:Props['onCameraPose'];onFade:(value:boolean)=>void}){
  const {camera}=useThree();const target=useRef(new Vector3(0,1.4,-2.3));const destination=useRef(new Vector3());const destinationTarget=useRef(new Vector3());const currentId=useRef('');const lastRoom=useRef('');const pending=useRef<{at:number;position:Vector3;target:Vector3;fov:number}|null>(null);const lastReport=useRef(0);const movementStart=useRef<{id:number;at:number;elapsed:number}|null>(null);
@@ -63,7 +76,7 @@ function Director({state,explore,onCameraPose,onFade}:{state:LiveState;explore:b
    (camera as PerspectiveCamera).fov=MathUtils.damp((camera as PerspectiveCamera).fov,68,4,dt);
   }else if(!explore){
    if(movementStart.current){movementStart.current=null;camera.position.copy(destination.current);target.current.copy(destinationTarget.current);}
-   if(!pending.current){const speed=state.paused?0:3;camera.position.lerp(destination.current,1-Math.exp(-dt*speed));target.current.lerp(destinationTarget.current,1-Math.exp(-dt*speed));(camera as PerspectiveCamera).fov=MathUtils.damp((camera as PerspectiveCamera).fov,preset.fov,3,dt);}
+   if(!pending.current){const speed=3;camera.position.lerp(destination.current,1-Math.exp(-dt*speed));target.current.lerp(destinationTarget.current,1-Math.exp(-dt*speed));(camera as PerspectiveCamera).fov=MathUtils.damp((camera as PerspectiveCamera).fov,preset.fov,3,dt);}
    camera.lookAt(target.current);
   }else if(room.kind!=='exterior'&&room.kind!=='yard'){
    // Exploration stays inside the room envelope. Inter-room travel uses validated paths.

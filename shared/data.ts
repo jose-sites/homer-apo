@@ -98,3 +98,26 @@ export const EVENTS: EventDefinition[] = [
 ].map(([id,name,probability,cooldown,priority,duration])=>({id:String(id),name:String(name),probability:Number(probability),cooldown:Number(cooldown),priority:Number(priority),duration:Number(duration),enabled:true,lastRun:0}));
 
 export const DEFAULT_SPRITE_POSITIONS: Record<CharacterId, Vec3> = {homer:[-1.7,0,-2.1],marge:[-.1,0,-2.1],bart:[1.25,0,-2.1],lisa:[2.3,0,-2.1],maggie:[3.1,0,-2.1]};
+
+// Physical passage locations shared by geometry, navigation and object actions.
+// Exterior parcels span several rooms; their centre must never define a diagonal exit.
+export const doorId = (a:string,b:string) => [a,b].sort().join('-');
+export const DOORWAYS: Record<string,Vec3> = {};
+for(const room of ROOMS)for(const neighborId of room.neighbors){
+ const neighbor=ROOMS.find(r=>r.id===neighborId)!;
+ if(room.origin[1]!==neighbor.origin[1])continue;
+ const key=doorId(room.id,neighbor.id);if(DOORWAYS[key])continue;
+ const [x,y,z]=room.origin,[nx,,nz]=neighbor.origin;
+ if(z!==nz){
+  const narrow=room.size[0]<=neighbor.size[0]?room:neighbor;
+  DOORWAYS[key]=[narrow.origin[0],y,narrow.origin[2]+Math.sign((narrow===room?nz:z)-narrow.origin[2])*narrow.size[1]/2];
+ }else DOORWAYS[key]=[(x+nx)/2,y,z];
+}
+DOORWAYS[doorId('living','hall')]=[3.8,0,-4];
+DOORWAYS[doorId('parents','upstairs')]=[1.2,3.6,-4];
+DOORWAYS[doorId('lisa','maggie')]=[12.8,3.6,-4];
+const localNavPoints:Record<string,[number,number]>={living:[3,1.5],kitchen:[-2.2,2],dining:[3.5,2.6],garage:[2.2,0],parents:[1.2,1.2],bart:[1.2,1.5],lisa:[1.2,1.5],maggie:[-2,.5],yard:[3,1.5]};
+export const ROOM_NAV_POINTS:Record<string,Vec3>=Object.fromEntries(ROOMS.map(room=>{
+ const [x,z]=localNavPoints[room.id]??(['hall','basement','attic'].includes(room.kind)?[3,0]:[0,0]);
+ return [room.id,[room.origin[0]+x,room.origin[1],room.origin[2]+z] as Vec3];
+}));

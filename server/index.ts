@@ -39,6 +39,8 @@ export function recoverState(saved: unknown, fresh: LiveState, now = Date.now())
   for (const event of saved.events as Array<Record<string, unknown>>) {
     if (!record(event)) continue;
     applyAction(candidate, { type: 'UPDATE_EVENT', eventId: event.id, patch: { enabled: event.enabled, probability: event.probability, cooldown: event.cooldown, duration: event.duration, priority: event.priority } }, now);
+    const restoredEvent = candidate.events.find(entry => entry.id === event.id);
+    if (restoredEvent && typeof event.lastRun === 'number' && Number.isFinite(event.lastRun) && event.lastRun >= 0) restoredEvent.lastRun = Math.min(event.lastRun, now);
   }
   for (const [id, value] of Object.entries(saved.characters)) {
     if (record(value)) applyAction(candidate, { type: 'CHARACTER', character: id, patch: { enabled: value.enabled, volume: value.volume, expression: value.expression } }, now);
@@ -67,7 +69,8 @@ export function createServer(options: ServerOptions = {}) {
   const dataDir = resolve(options.dataDir || env.DATA_DIR || 'data');
   const db = new StateDatabase(options.databasePath || join(dataDir, 'homer.sqlite'));
   const state = recoverState(db.load(), createInitialState());
-  const audio = new AudioProvider(join(dataDir, 'audio-cache'), env, options.fetchImpl);
+  const shutdown = new AbortController();
+  const audio = new AudioProvider(join(dataDir, 'audio-cache'), env, options.fetchImpl, shutdown.signal);
   const app = express();
   const httpServer = createHttpServer(app);
   const wss = new WebSocketServer({ noServer: true, maxPayload: 1024 });
@@ -82,6 +85,8 @@ export function createServer(options: ServerOptions = {}) {
   let pingTimer: ReturnType<typeof setInterval> | undefined;
   let closed = false;
   let aiBusy = false;
+  let aiGeneration = 0;
+  let publicGame: { sourceId: string; id: string } | null = null;
   let lastAIAt = 0;
   let lastTick = Date.now();
   let persistenceError: string | null = null;
@@ -105,7 +110,7 @@ export function createServer(options: ServerOptions = {}) {
   }
   function broadcast() {
     updateProviderStatus();
-    const packet = JSON.stringify({ type: 'state', state });
+    const packet = JSON.stringify({ type: 'state', state: publicState() });
     for (const client of wss.clients) {
       if (client.readyState === WebSocket.OPEN) {
         if (client.bufferedAmount > 2_000_000) client.close(1013, 'Cliente lento; reconecte para obter o estado atual.');
@@ -113,6 +118,13 @@ export function createServer(options: ServerOptions = {}) {
       }
     }
     schedulePersist();
+  }
+  function publicState(): LiveState {
+    // Internal game ids encode the bank index for server-side recovery. Never
+    // expose that answer selector (or voter hashes) through HTTP or WebSocket.
+    if (!state.game) { publicGame = null; return state; }
+    if (publicGame?.sourceId !== state.game.id) publicGame = { sourceId: state.game.id, id: randomUUID() };
+    return { ...state, game: { ...state.game, id: publicGame.id, guesses: state.game.type === 'poll' ? [] : state.game.guesses } };
   }
   const token = env.ADMIN_TOKEN || '';
   const equal = (a: string, b: string) => { const x = Buffer.from(a); const y = Buffer.from(b); return x.length === y.length && timingSafeEqual(x, y); };
@@ -162,12 +174,13 @@ export function createServer(options: ServerOptions = {}) {
     res.json({ ok: true });
   });
   app.use('/api', (req, res, next) => { if (!authorized(req.headers)) res.status(401).json({ ok: false, error: 'Configure o token de operador para conectar.' }); else next(); });
-  app.get('/api/state', (_req, res) => res.json(state));
+  app.get('/api/state', (_req, res) => res.json(publicState()));
   app.get('/api/diagnostics', async (_req, res) => res.json({ uptimeSeconds: Math.floor((Date.now() - boot) / 1000), websocketClients: wss.clients.size, database: db.stats(), providers: capabilities, audioCache: await audio.stats(), aiBusy, lastProviderError: providerError, persistenceError, processMemoryMB: Math.round(process.memoryUsage().rss / 1_048_576) }));
   app.get('/api/history', (_req, res) => res.json({ events: db.recentEvents() }));
   app.post('/api/action', (req, res) => {
     const result = applyAction(state, req.body, Date.now());
     if (result.ok) {
+      if (req.body?.type === 'PAUSE' || req.body?.type === 'SETTINGS' && ['mode', 'provider', 'aiEnabled'].some(key => key in (req.body.settings || {}))) aiGeneration++;
       if (req.body?.type === 'CLEAR_MEMORY') {
         state.logs = state.logs.filter(entry => entry.type === 'memory').slice(0, 1);
         db.clearHistory(); persist();
@@ -176,18 +189,22 @@ export function createServer(options: ServerOptions = {}) {
     }
     res.status(result.ok ? 200 : 400).json(result);
   });
-  async function respond(messageId?: string) {
+  async function respond(messageId?: string, automatic = false) {
     if (aiBusy) throw new ProviderError('A IA já está preparando uma resposta.', 409);
+    if (closed || automatic && state.settings.mode === 'manual') throw new ProviderError('Resposta automática cancelada pelo operador.', 409);
     if (state.paused) throw new ProviderError('Retome a operação antes de solicitar uma fala.', 409);
     if (!state.settings.aiEnabled) throw new ProviderError('Ative a IA no painel antes de solicitar uma resposta.', 409);
     const message = messageId ? state.chat.find(m => m.id === messageId) : [...state.chat].reverse().find(m => m.selected);
     if (messageId && !message) throw new ProviderError('Mensagem não encontrada.', 404);
     if (Date.now() - lastAIAt < state.settings.responseCooldown * 1000) throw new ProviderError('Aguarde o intervalo configurado entre respostas.', 429);
     aiBusy = true;
+    const generation = aiGeneration;
+    const provider = state.settings.provider;
     lastAIAt = Date.now();
     try {
       const prompt = message?.text || 'Cumprimente o chat e comente sua atividade atual.';
-      const actions = state.settings.provider === 'demo' ? [localReply(prompt)] : await generateActions(state, prompt, env, options.fetchImpl);
+      const actions = provider === 'demo' ? [localReply(prompt)] : await generateActions(state, prompt, env, options.fetchImpl, shutdown.signal);
+      if (closed || generation !== aiGeneration || state.paused || !state.settings.aiEnabled || automatic && state.settings.mode === 'manual') throw new ProviderError('Resposta descartada: a operação ou configuração da IA mudou durante a requisição.', 409);
       // Validate an entire response against a clone before any real mutations.
       const preview = structuredClone(state);
       for (const action of actions) {
@@ -202,9 +219,9 @@ export function createServer(options: ServerOptions = {}) {
       state.proposals = state.proposals.slice(-20);
       if (message) { message.selected = false; processedMessages.add(message.id); }
       providerError = null;
-      event('ai', state.settings.provider === 'demo' ? 'Resposta produzida pelo banco local de demonstração.' : 'Resposta recebida da API e validada pelo motor.');
+      event('ai', provider === 'demo' ? 'Resposta produzida pelo banco local de demonstração.' : 'Resposta recebida da API e validada pelo motor.');
       broadcast();
-      return { ok: true, source: state.settings.provider, actions: actions.length };
+      return { ok: true, source: provider, actions: actions.length };
     } catch (error) {
       const message = error instanceof ProviderError ? error.message : 'Falha inesperada no provedor de IA.';
       providerError = message; event('error', message); broadcast(); throw error;
@@ -243,7 +260,7 @@ export function createServer(options: ServerOptions = {}) {
     alive.add(ws); ws.on('pong', () => alive.add(ws));
     ws.on('error', () => { /* Per-client disconnects cannot crash the engine. */ });
     ws.on('message', () => ws.close(1008, 'Socket somente para leitura. Envie ações pela API.'));
-    ws.send(JSON.stringify({ type: 'state', state }));
+    ws.send(JSON.stringify({ type: 'state', state: publicState() }));
   });
 
   async function start(port = Number(env.PORT || 3001), host = env.HOST || '127.0.0.1') {
@@ -255,7 +272,7 @@ export function createServer(options: ServerOptions = {}) {
         tick(state, now, elapsed);
         if (!state.paused && state.settings.mode !== 'manual' && state.settings.aiEnabled && state.settings.provider === 'openai-compatible' && !aiBusy && now - lastAIAt >= state.settings.responseCooldown * 1000) {
           const selected = state.chat.find(m => m.selected && !processedMessages.has(m.id));
-          if (selected) { processedMessages.add(selected.id); void respond(selected.id).catch(() => undefined); }
+          if (selected) { processedMessages.add(selected.id); void respond(selected.id, true).catch(() => undefined); }
         }
         if (processedMessages.size > 200) { const current = new Set(state.chat.map(m => m.id)); for (const id of processedMessages) if (!current.has(id)) processedMessages.delete(id); }
         broadcast();
@@ -270,7 +287,7 @@ export function createServer(options: ServerOptions = {}) {
   }
   async function close() {
     if (closed) return;
-    closed = true; if (ticker) clearInterval(ticker); if (pingTimer) clearInterval(pingTimer); if (persistTimer) clearTimeout(persistTimer);
+    closed = true; aiGeneration++; shutdown.abort(); if (ticker) clearInterval(ticker); if (pingTimer) clearInterval(pingTimer); if (persistTimer) clearTimeout(persistTimer);
     persist();
     for (const ws of wss.clients) ws.terminate();
     await new Promise<void>(done => wss.close(() => done()));

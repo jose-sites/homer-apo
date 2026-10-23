@@ -1,0 +1,24 @@
+{
+  "passed": 16,
+  "checks": [
+    "3D WebGL mounted and rendered nonzero draw calls",
+    "Camera selection reaches engine, WebSocket and viewport",
+    "Custom camera saved in authoritative catalog",
+    "Expressions and custom dialogue bank work",
+    "Local chat and explicit demo response queue work",
+    "Hangman input and poll vote count rendered correctly",
+    "Numeric configuration can be edited and persisted on blur",
+    "Manual event applies weather",
+    "Global pause freezes virtual time",
+    "Validated stair route arrives upstairs",
+    "Audio diagnostics and Web Audio effect controls work",
+    "Memory and configuration screens render",
+    "1920×1080 OBS output has real canvas, shared camera, no admin",
+    "Clean overlay hides broadcast chrome",
+    "Client reconnects after forced WebSocket interruption",
+    "Mobile layout has no horizontal overflow"
+  ],
+  "pageErrors": [],
+  "renderer": "Chromium software WebGL (SwiftShader); not a hardware FPS benchmark",
+  "at": "2026-10-23T18:21:11.221Z"
+}

@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { CAMERAS, EVENTS, LINES, MAGGIE_EFFECTS, ROOMS } from './data';
+import { CAMERAS, DOORWAYS, EVENTS, LINES, MAGGIE_EFFECTS, ROOMS, ROOM_NAV_POINTS, doorId } from './data';
 import { createGame, finishGame, submitGameInput, tickGame } from './games';
 import type { Action, CameraPreset, CharacterId, EventDefinition, Line, LiveState, Room, Settings, Speech, Vec3 } from './types';
 
@@ -20,7 +20,7 @@ export const ActionSchema=z.discriminatedUnion('type',[
  z.object({type:z.literal('START_GAME'),game:z.enum(['hangman','quiz','guess','poll','challenge'])}).strict(),
  z.object({type:z.literal('STOP_GAME')}).strict(),
  z.object({type:z.literal('PLAY_ANIMATION'),character,activity}).strict(),
- z.object({type:z.literal('INTERACT_WITH_OBJECT'),object:z.enum(['tv','fridge','door','lights','sofa','bed','doorbell'])}).strict(),
+ z.object({type:z.literal('INTERACT_WITH_OBJECT'),object:z.union([z.enum(['tv','fridge','door','lights','sofa','bed','doorbell']),z.string().regex(/^door:[a-z]+-[a-z]+$/)])}).strict(),
  z.object({type:z.literal('RESPOND_TO_FAMILY'),character}).strict(),
  z.object({type:z.literal('PAUSE'),paused:z.boolean()}).strict(),
  z.object({type:z.literal('SETTINGS'),settings:SettingsSchema.partial()}).strict(),
@@ -77,28 +77,62 @@ function speakBank(state:LiveState,who:CharacterId,now:number,category?:string,p
  if(who==='maggie')return say(state,'maggie','Maggie faz um som suave.',now,1,MAGGIE_EFFECTS[Math.floor(Math.random()*MAGGIE_EFFECTS.length)]);
  const line=selectLine(state,who,category);return line?say(state,who,line.text,now,priority):{ok:false,error:'Nenhuma fala disponível.'};
 }
-export function roomPoint(room:Room):Vec3 {return [room.origin[0]+(room.kind==='hall'?3:0),room.origin[1],room.origin[2]];}
+export function roomPoint(room:Room):Vec3 {return [...ROOM_NAV_POINTS[room.id]];}
 export function findRoomPath(from:string,to:string):string[]|null{
  if(!ROOMS.some(r=>r.id===from)||!ROOMS.some(r=>r.id===to))return null;
  const queue=[[from]];const seen=new Set([from]);
  while(queue.length){const path=queue.shift()!;if(path.at(-1)===to)return path;for(const neighbor of ROOMS.find(r=>r.id===path.at(-1))!.neighbors){if(!seen.has(neighbor)){seen.add(neighbor);queue.push([...path,neighbor]);}}}return null;
+}
+// Each approach stays inside its room and skirts fixed furnishings. Reversing it
+// produces an equally safe arrival; adjacent rooms meet at exactly one portal.
+export function doorwayApproach(room:Room,doorway:Vec3):Vec3[]{
+ const [rx,y,rz]=room.origin,dx=doorway[0]-rx,dz=doorway[2]-rz;
+ const local=(x:number,z:number):Vec3=>[rx+x,y,rz+z];
+ const points:Vec3[]=[roomPoint(room)];
+ const add=(...coords:Array<[number,number]>)=>points.push(...coords.map(([x,z])=>local(x,z)));
+ if(room.kind==='hall'){
+  if(dz>0)add([3,2.6],[dx,2.6]);
+  else if(dz<0)add([3,-3.2],[dx,-3.2]);
+  else if(dx<0)add([3,2.6],[-2.8,2.6],[-2.8,0]);
+ }else if(room.id==='living'){
+  if(dz<0)add([3.8,1.5],[3.8,-2]);
+  else if(dz>0)add([0,1.5]);
+  else if(dx<0)add([-3.3,1.5],[-3.3,0]);
+  else add([3,0]);
+ }else if(room.id==='kitchen'){
+  if(dz<0)add([-2.2,-1.5],[0,-1.5]);else add([-2.2,0]);
+ }else if(room.id==='dining'){
+  if(dz<0)add([3.5,-2.4],[dx,-2.4]);
+  else if(dz>0)add([dx,2.6]);
+  else add([-3.5,2.6],[-3.5,0]);
+ }else if(room.id==='garage'){
+  if(dz<0)add([1.7,0],[1.7,-3.2],[0,-3.2]);
+  else if(dz>0)add([2.2,3.3],[0,3.3]);
+ }else if(room.id==='parents'){
+  if(dz<0)add([1.2,-1.5]);else add([1.2,0]);
+ }else if(room.id==='bart')add([1.2,0]);
+ else if(room.id==='lisa'){
+  if(dz>0)add([dx,1.5]);else add([1.2,2.7],[-3.3,2.7],[-3.3,0]);
+ }else if(room.id==='maggie'){
+  if(dz<0)add([dx,.5]);else add([-2,0]);
+ }else if(room.id==='yard')add([dx,1.5]);
+ else if(room.id==='front')add([0,-2],[dx,-2]);
+ points.push([...doorway]);
+ return points;
 }
 export function movementWaypoints(from:string,to:string):Vec3[]|null{
  const rooms=findRoomPath(from,to);if(!rooms)return null;
  const points:Vec3[]=[roomPoint(ROOMS.find(r=>r.id===from)!)];
  for(let i=1;i<rooms.length;i++){
   const a=ROOMS.find(r=>r.id===rooms[i-1])!,b=ROOMS.find(r=>r.id===rooms[i])!;
-  const [ax,ay,az]=a.origin,[bx,by,bz]=b.origin;
+  const ay=a.origin[1],by=b.origin[1];
   if(ay!==by){
-   const bottom=Math.min(ay,by);const stairs:Vec3[]=[[3,bottom,-6.2],[0,bottom,-6.2],[0,bottom+3.6,-10.6],[3,bottom+3.6,-10.6]];
-   points.push(...(ay<by?stairs:[...stairs].reverse()));
-  } else if((a.id==='living'&&b.id==='hall')||(a.id==='hall'&&b.id==='living')){
-   points.push([3.8,ay,a.id==='living'?-2:-6],[3.8,ay,-4],[3.8,ay,b.id==='living'?-2:-6]);
-  } else if(az!==bz){
-   const x=a.size[0]>b.size[0]?bx:ax;
-   points.push([x,ay,az],[x,ay,(az+bz)/2],[x,by,bz]);
-  } else {points.push([ax,ay,az],[(ax+bx)/2,ay,az],[bx,by,bz]);}
-  points.push(roomPoint(b));
+   const bottom=Math.min(ay,by);const stairs:Vec3[]=[[3,bottom,-6.2],[0,bottom,-6.2],[0,bottom+3.6,-10.6],[0,bottom+3.6,-11.2],[3,bottom+3.6,-11.2]];
+   points.push(...(ay<by?stairs:[...stairs].reverse()),roomPoint(b));
+  }else{
+   const portal=DOORWAYS[doorId(a.id,b.id)];if(!portal)return null;
+   points.push(...doorwayApproach(a,portal),...doorwayApproach(b,portal).reverse());
+  }
  }
  return points.filter((p,i,all)=>i===0||p.some((v,j)=>Math.abs(v-all[i-1][j])>.01));
 }
@@ -115,7 +149,7 @@ function move(state:LiveState,to:string,now:number){
  const path=movementWaypoints(state.room,to);if(!path)return {ok:false,error:'Não existe rota para esse ambiente.'};
  const length=path.reduce((sum,p,i)=>i?sum+Math.hypot(...p.map((v,j)=>v-path[i-1][j])):sum,0);
  const route=findRoomPath(state.room,to)!;
- for(let i=1;i<route.length;i++)state.doors[[route[i-1],route[i]].sort().join(':')]=true;
+ for(let i=1;i<route.length;i++){const key=doorId(route[i-1],route[i]);if(DOORWAYS[key])state.doors[key]=true;}
  state.movement={from:state.room,to,path,startedAt:now,duration:Math.max(5000,length/2.4*1000)};
  state.characters.homer.activity='walking';
  say(state,'homer',`Vou até ${ROOMS.find(r=>r.id===to)!.name.toLowerCase()}. Já volto à conversa!`,now,5);
@@ -179,7 +213,15 @@ export function applyAction(state:LiveState,value:unknown,now=Date.now()):{ok:bo
    if(action.object==='fridge'){if(state.room!=='kitchen')return {ok:false,error:'A geladeira fica na cozinha.'};state.doors.fridge=!state.doors.fridge;state.homer.hunger=clamp(state.homer.hunger-20);}
    else if(action.object==='tv'){if(state.room!=='living')return {ok:false,error:'A televisão fica na sala.'};state.tvChannel=(state.tvChannel+1)%5;}
    else if(action.object==='lights')state.power=!state.power;
-   else if(action.object==='door'){const neighbor=ROOMS.find(r=>r.id===state.room)!.neighbors[0];const key=[state.room,neighbor].sort().join(':');state.doors[key]=!state.doors[key];}
+   else if(action.object==='door'||action.object.startsWith('door:')){
+    const neighbor=ROOMS.find(r=>r.id===state.room)!.neighbors.find(id=>DOORWAYS[doorId(state.room,id)]);
+    const key=action.object==='door'?(neighbor?doorId(state.room,neighbor):''):action.object.slice(5);
+    if(!DOORWAYS[key])return {ok:false,error:'Porta inexistente ou identificador não canônico.'};
+    const endpoints=key.split('-');if(!endpoints.includes(state.room))return {ok:false,error:'Homer precisa estar em um dos cômodos ligados a essa porta.'};
+    const isOpen=state.doors[key]??true;
+    if(isOpen&&state.movement){const path=findRoomPath(state.movement.from,state.movement.to)!;if(path.some((room,i)=>i>0&&doorId(path[i-1],room)===key))return {ok:false,error:'Aguarde o deslocamento terminar antes de fechar essa porta.'};}
+    state.doors[key]=!isOpen;
+   }
    else if(action.object==='sofa'){if(state.room!=='living')return {ok:false,error:'O sofá fica na sala.'};state.characters.homer.activity='sitting';}
    else if(action.object==='bed'){if(state.room!=='parents')return {ok:false,error:'A cama do Homer fica no quarto do casal.'};state.characters.homer.activity='sleeping';}
    else result=triggerEvent(state,state.events.find(e=>e.id==='doorbell')!,now,true);

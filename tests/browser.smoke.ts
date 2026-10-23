@@ -1,0 +1,70 @@
+import assert from 'node:assert/strict';
+import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join, resolve } from 'node:path';
+import { chromium } from 'playwright';
+import { createServer } from '../server/index';
+import { tick } from '../shared/engine';
+
+// Isolated real server, SQLite and WebSocket; never changes the operator's data.
+const dir=await mkdtemp(join(tmpdir(),'homer-browser-'));
+const runtime=createServer({dataDir:dir,env:{},log:()=>{}});
+runtime.state.settings.quality='low';runtime.state.settings.adaptiveQuality=false;
+const {url}=await runtime.start(0);
+const output=resolve(process.env.BROWSER_OUTPUT||'test-results/browser');await mkdir(output,{recursive:true});
+const browser=await chromium.launch({executablePath:process.env.CHROMIUM_PATH||undefined,headless:true,args:['--no-sandbox','--enable-unsafe-swiftshader','--use-angle=swiftshader','--disable-dev-shm-usage']});
+const page=await browser.newPage({viewport:{width:1440,height:1000}});page.setDefaultTimeout(25000);
+const errors:string[]=[],checks:string[]=[];page.on('pageerror',e=>errors.push(e.message));
+const post=async(action:unknown)=>{const response=await fetch(`${url}/api/action`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(action)});const data=await response.json();assert.equal(data.ok,true,JSON.stringify(data));};
+const wait=async(predicate:()=>boolean)=>{const deadline=Date.now()+12000;while(!predicate()){if(Date.now()>deadline)throw Error('State assertion timed out');await new Promise(r=>setTimeout(r,80));}};
+const nav=async(name:string)=>page.locator('nav').getByRole('button',{name,exact:true}).click();
+try{
+ await page.goto(url,{waitUntil:'domcontentloaded'});
+ await page.locator('.server-status').filter({hasText:'Servidor conectado'}).waitFor();
+ await page.locator('canvas').waitFor();
+ await page.waitForFunction(()=>Number(document.querySelector('.viewport')?.getAttribute('data-draw-calls'))>0);
+ assert.equal(await page.locator('.scene-error').count(),0);checks.push('3D WebGL mounted and rendered nonzero draw calls');
+ await page.screenshot({path:join(output,'studio.png'),fullPage:true});
+ await page.getByRole('button',{name:'03 Cozinha',exact:false}).click();
+ await wait(()=>runtime.state.cameraId==='kitchen-front');
+ await page.locator('.scene-bottom').getByText('Cozinha · frontal').waitFor();checks.push('Camera selection reaches engine, WebSocket and viewport');
+ await nav('Câmeras');await page.getByRole('button',{name:'Salvar enquadramento',exact:true}).click();
+ await page.getByRole('dialog').getByLabel('Nome',{exact:true}).fill('Câmera teste QA');
+ // Wait pose report after frame mounting to capture actual current camera.
+ await page.waitForTimeout(700);
+ await page.getByRole('button',{name:'Adicionar câmera',exact:true}).click();
+ await wait(()=>runtime.state.cameras.some(c=>c.name==='Câmera teste QA'));checks.push('Custom camera saved in authoritative catalog');
+ await nav('Personagens');
+ await page.getByLabel('Expressão',{exact:false}).first().selectOption('confused');await wait(()=>runtime.state.characters.homer.expression==='confused');
+ await page.getByLabel('Texto',{exact:true}).fill('Fala de verificação do estúdio.');
+ await page.getByRole('button',{name:'Salvar no banco',exact:true}).click();await page.getByRole('button',{name:'Salvar fala',exact:true}).click();
+ await wait(()=>runtime.state.lines.some(l=>l.text==='Fala de verificação do estúdio.'));checks.push('Expressions and custom dialogue bank work');
+ await nav('Estúdio ao vivo');await page.getByLabel('Mensagem do chat',{exact:true}).fill('Homer, você gosta de rosquinhas?');await page.getByRole('button',{name:'Enviar mensagem',exact:true}).click();
+ await wait(()=>runtime.state.chat.length===1);await page.getByRole('button',{name:'Homer responde',exact:true}).click();await wait(()=>runtime.state.speechQueue.length>0||runtime.state.speaking!==null);checks.push('Local chat and explicit demo response queue work');
+ await nav('Minijogos');await page.getByRole('button',{name:'Forca de Springfield',exact:false}).click();await wait(()=>runtime.state.game?.type==='hangman');
+ await page.locator('.letter-board').getByRole('button',{name:'A',exact:true}).click();await wait(()=>runtime.state.game!.guesses.includes('A'));await page.getByRole('button',{name:'Encerrar rodada',exact:true}).click();
+ await wait(()=>runtime.state.game?.status==='ended');
+ await page.getByRole('button',{name:'O chat decide',exact:false}).click();await wait(()=>runtime.state.game?.type==='poll');
+ await page.locator('.game-options button').first().click();await wait(()=>runtime.state.game?.votes['0']===1);await page.locator('.game-options button').first().locator('b').filter({hasText:/^1$/}).waitFor();checks.push('Hangman input and poll vote count rendered correctly');
+ await page.getByRole('button',{name:'Encerrar rodada',exact:true}).click();await wait(()=>runtime.state.game?.status==='ended');
+ await nav('Casa viva');await page.getByLabel('Intervalo mínimo (s)',{exact:true}).first().fill('60');await page.getByLabel('Intervalo mínimo (s)',{exact:true}).first().press('Tab');await wait(()=>runtime.state.settings.familyMin===60);checks.push('Numeric configuration can be edited and persisted on blur');await page.locator('.event-card').filter({has:page.getByRole('heading',{name:'Chuva no jardim',exact:true})}).getByRole('button',{name:'Executar',exact:true}).click();await wait(()=>runtime.state.weather==='rain');checks.push('Manual event applies weather');
+ await post({type:'SETTINGS',settings:{timeMode:'accelerated',timeScale:60}});
+ await page.getByRole('button',{name:'Pausar tudo',exact:true}).click();await wait(()=>runtime.state.paused);const hour=runtime.state.virtualHour;await page.waitForTimeout(1200);assert.equal(runtime.state.virtualHour,hour);await page.getByRole('button',{name:'Retomar',exact:true}).click();await wait(()=>!runtime.state.paused);checks.push('Global pause freezes virtual time');
+ await post({type:'MOVE_TO_ROOM',room:'parents'});assert.ok(runtime.state.movement?.path.some(p=>p[1]>0));
+ // Advance authoritative engine clock to test arrival without waiting for a long tour.
+ const end=runtime.state.movement!.startedAt+runtime.state.movement!.duration+1;tick(runtime.state,end,1000);runtime.broadcast();await wait(()=>runtime.state.room==='parents');checks.push('Validated stair route arrives upstairs');
+ await nav('Áudio e voz');await page.getByRole('button',{name:'Consultar diagnóstico do servidor'}).click();await page.locator('.diagnostic-json').waitFor();assert.match(await page.locator('.diagnostic-json').innerText(),/SQLite/);await page.getByRole('switch',{name:'Ativar áudio local',exact:true}).click();await page.getByRole('button',{name:'Campainha',exact:true}).click();checks.push('Audio diagnostics and Web Audio effect controls work');
+ await nav('Memória e ações');await page.locator('.event-table-row').first().waitFor();await nav('Configurações');await page.getByText('Saúde do servidor',{exact:true}).waitFor();checks.push('Memory and configuration screens render');
+ const overlay=await browser.newPage({viewport:{width:1920,height:1080}});overlay.on('pageerror',e=>errors.push(e.message));await overlay.goto(`${url}/overlay`,{waitUntil:'domcontentloaded'});await overlay.locator('canvas').waitFor();
+ assert.equal(await overlay.locator('nav').count(),0);assert.equal(await overlay.locator('.sidebar').count(),0);
+ await post({type:'CHANGE_CAMERA',cameraId:'living-family'});await overlay.locator('.scene-bottom').getByText('Família · sofá').waitFor();
+ await overlay.waitForFunction(()=>Number(document.querySelector('.viewport')?.getAttribute('data-draw-calls'))>0);
+ await overlay.screenshot({path:join(output,'overlay-1080p.png')});checks.push('1920×1080 OBS output has real canvas, shared camera, no admin');
+ await post({type:'SETTINGS',settings:{cleanOverlay:true}});await overlay.locator('.scene-top').waitFor({state:'detached'});checks.push('Clean overlay hides broadcast chrome');await overlay.close();
+ await nav('Estúdio ao vivo');
+ const reconnected=new Promise<void>((resolve,reject)=>{const timeout=setTimeout(()=>reject(Error('WebSocket did not reconnect')),12000);runtime.wss.once('connection',()=>{clearTimeout(timeout);resolve();});});
+ for(const client of runtime.wss.clients)client.terminate();await reconnected;
+ await page.locator('.server-status').filter({hasText:'Servidor conectado'}).waitFor();checks.push('Client reconnects after forced WebSocket interruption');
+ await page.setViewportSize({width:390,height:844});await page.waitForTimeout(700);assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1));await page.screenshot({path:join(output,'mobile.png'),fullPage:true});checks.push('Mobile layout has no horizontal overflow');
+ assert.deepEqual(errors,[]);const result={passed:checks.length,checks,pageErrors:errors,renderer:'Chromium software WebGL (SwiftShader); not a hardware FPS benchmark',at:new Date().toISOString()};await writeFile(join(output,'report.json'),JSON.stringify(result,null,2));console.log(JSON.stringify(result,null,2));
+}catch(error){await page.screenshot({path:join(output,'failure.png'),fullPage:true}).catch(()=>{});console.error(JSON.stringify({errors,body:(await page.locator('body').innerText()).slice(0,3500)}));throw error;}finally{await browser.close();await runtime.close();await rm(dir,{recursive:true,force:true});}

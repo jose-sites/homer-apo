@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createInitialState,applyAction,tick,findRoomPath,movementWaypoints,selectLine,validateAction } from '../shared/engine';
-import { ROOMS, CAMERAS, LINES } from '../shared/data';
+import { createInitialState,applyAction,tick,findRoomPath,movementWaypoints,doorwayApproach,selectLine,validateAction } from '../shared/engine';
+import { ROOMS, CAMERAS, LINES, DOORWAYS, doorId } from '../shared/data';
 const NOW=1_800_000_000_000;
 function state(){return createInitialState(NOW);}
 
@@ -138,4 +138,68 @@ test('automatic poll executes the winning validated activity at deadline',()=>{
  const s=state();applyAction(s,{type:'SETTINGS',settings:{mode:'auto',aiEnabled:false,familyEnabled:false,eventsEnabled:false}},NOW);
  applyAction(s,{type:'START_GAME',game:'poll'},NOW);applyAction(s,{type:'GAME_INPUT',value:'A',user:'ana'},NOW);
  tick(s,s.game!.endsAt+1,1000);assert.equal(s.movement?.to,'kitchen');
+});
+
+test('physical door actions use canonical scene IDs and respect adjacency and active routes',()=>{
+ const s=state(),key=doorId('living','kitchen');
+ assert.equal(applyAction(s,{type:'INTERACT_WITH_OBJECT',object:`door:${key}`},NOW).ok,true);
+ assert.equal(s.doors[key],false,'first click closes the default-open door');
+ assert.equal(applyAction(s,{type:'INTERACT_WITH_OBJECT',object:'door'},NOW).ok,true);
+ assert.equal(s.doors[key],true,'legacy generic action reopens the same door');
+ for(const invalid of ['door:living-kitchen','door:unknown-room','door:dining-kitchen','door:hall-upstairs']){
+  assert.equal(applyAction(s,{type:'INTERACT_WITH_OBJECT',object:invalid},NOW).ok,false,invalid);
+ }
+ applyAction(s,{type:'MOVE_TO_ROOM',room:'kitchen'},NOW);
+ assert.equal(s.doors[key],true);
+ assert.equal(applyAction(s,{type:'INTERACT_WITH_OBJECT',object:`door:${key}`},NOW+1).ok,false,'cannot close a door on an active path');
+ tick(s,NOW+s.movement!.duration+1,1000);
+ assert.equal(applyAction(s,{type:'INTERACT_WITH_OBJECT',object:`door:${key}`},NOW+60000).ok,true);
+ assert.equal(s.doors[key],false);
+});
+
+test('every indoor approach stays inside its room and reaches exactly the shared physical doorway',()=>{
+ for(const room of ROOMS)for(const neighbor of room.neighbors){
+  const key=doorId(room.id,neighbor),portal=DOORWAYS[key];if(!portal)continue;
+  const path=doorwayApproach(room,portal);assert.deepEqual(path.at(-1),portal,key);
+  for(let i=0;i<path.length;i++){
+   const p=path[i],localX=p[0]-room.origin[0],localZ=p[2]-room.origin[2];
+   assert.ok(Math.abs(localX)<=room.size[0]/2+.001&&Math.abs(localZ)<=room.size[1]/2+.001,`${key}: point outside ${room.id}`);
+   assert.equal(p[1],room.origin[1]);
+   if(i>0)assert.ok(Math.abs(p[0]-path[i-1][0])<.001||Math.abs(p[2]-path[i-1][2])<.001,`${key}: diagonal furniture shortcut`);
+   const onBoundary=Math.abs(Math.abs(localX)-room.size[0]/2)<.001||Math.abs(Math.abs(localZ)-room.size[1]/2)<.001;
+   if(onBoundary&&!['exterior','yard'].includes(room.kind))assert.deepEqual(p,portal,`${key}: crossing a solid wall`);
+  }
+ }
+});
+
+test('garage/front and dining/yard routes exit through portals before travelling sideways outdoors',()=>{
+ for(const [a,b,portal]of [['garage','front',[-10,0,4]],['dining','yard',[10,0,-12]]] as const){
+  const path=movementWaypoints(a,b)!;
+  assert.deepEqual(DOORWAYS[doorId(a,b)],portal);
+  const portalIndex=path.findIndex(p=>p.every((v,i)=>v===portal[i]));assert.ok(portalIndex>0);
+  const next=path[portalIndex+1];assert.equal(next[0],portal[0],'first outside segment is perpendicular to door');
+  const reverse=movementWaypoints(b,a)!;assert.deepEqual(reverse,[...path].reverse(),'reverse route follows identical safe corridor');
+ }
+});
+
+test('navigation approaches avoid the car, dining table, kitchen table and staircase shaft',()=>{
+ const obstacles:Record<string,{x:[number,number];z:[number,number]}[]>={
+  garage:[{x:[-1.4,1.4],z:[-2.7,2.2]}],
+  kitchen:[{x:[-.8,1.8],z:[-.25,1.45]}],
+  dining:[{x:[-2.1,2.1],z:[-1.2,1.2]}],
+  hall:[{x:[-1.4,1.4],z:[-2.9,2]}],
+  upstairs:[{x:[-1.4,1.4],z:[-2.9,2]}],
+  parents:[{x:[-2.9,.3],z:[-3.3,.1]}],
+  maggie:[{x:[-1.3,1.3],z:[-2.7,-.9]}],
+ };
+ for(const [roomId,boxes]of Object.entries(obstacles)){
+  const room=ROOMS.find(r=>r.id===roomId)!;
+  for(const neighbor of room.neighbors){const portal=DOORWAYS[doorId(room.id,neighbor)];if(!portal)continue;
+   const path=doorwayApproach(room,portal);
+   for(let i=1;i<path.length;i++)for(let step=0;step<=50;step++){
+    const t=step/50,x=path[i-1][0]+(path[i][0]-path[i-1][0])*t-room.origin[0],z=path[i-1][2]+(path[i][2]-path[i-1][2])*t-room.origin[2];
+    assert.ok(boxes.every(box=>x<box.x[0]||x>box.x[1]||z<box.z[0]||z>box.z[1]),`${room.id} → ${neighbor} enters obstruction at ${x},${z}`);
+   }
+  }
+ }
 });

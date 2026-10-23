@@ -21,6 +21,7 @@ test('SQLite round-trip persists operator settings, custom cameras/lines; raw ch
     applyAction(state, { type: 'TALK', character: 'homer', text: 'Esta fila não deve ser reproduzida.' }, now);
     state.memory.push('Chat comentou: texto privado do chat', 'Resumo: Homer visitou a cozinha.');
     state.room = 'kitchen'; state.characters.homer.room = 'kitchen';
+    state.events[0].lastRun = now - 1000;
     db.save(state, now); db.close(); db = new StateDatabase(path);
     const saved = db.load() as LiveState;
     assert.equal(saved.settings.masterVolume, 0.35); assert.deepEqual(saved.chat, []); assert.deepEqual(saved.speechQueue, []);
@@ -28,6 +29,7 @@ test('SQLite round-trip persists operator settings, custom cameras/lines; raw ch
     const recovered = recoverState(saved, createInitialState(now + 1), now + 1);
     assert.equal(recovered.paused, true); assert.equal(recovered.settings.mode, 'auto'); assert.equal(recovered.speaking, null);
     assert.equal(recovered.room, 'kitchen'); assert.equal(recovered.cameraId, 'living-family');
+    assert.equal(recovered.events[0].lastRun, now - 1000);
     assert.ok(recovered.cameras.some(c => c.id === 'my-camera')); assert.ok(recovered.lines.some(l => l.id === 'custom-line'));
     assert.equal(recovered.logs[0].type, 'recovery');
   } finally { db.close(); await rm(dir, { recursive: true, force: true }); }

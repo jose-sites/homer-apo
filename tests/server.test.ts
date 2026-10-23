@@ -4,6 +4,7 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { once } from 'node:events';
+import { setTimeout as delay } from 'node:timers/promises';
 import { WebSocket } from 'ws';
 import { createServer, type ServerOptions } from '../server/index.ts';
 
@@ -14,6 +15,7 @@ async function fixture(options: ServerOptions = {}) {
   return { server, url, port, close: async () => { await server.close(); await rm(dir, { recursive: true, force: true }); } };
 }
 const post = (url: string, action: unknown, headers: Record<string,string> = {}) => fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json', ...headers }, body: JSON.stringify(action) });
+async function waitUntil(predicate: () => boolean, timeout = 2000) { const end = Date.now() + timeout; while (!predicate()) { if (Date.now() >= end) throw new Error('Timed out waiting for runtime state'); await delay(10); } }
 
 test('HTTP returns authoritative state and applies only validated actions', async () => {
   const f = await fixture();
@@ -99,5 +101,70 @@ test('Semiautomatic external AI becomes an operator proposal after validation', 
     assert.equal(f.server.state.speechQueue.length, 0); assert.equal(f.server.state.proposals.length, 1);
     assert.equal((await post(`${f.url}/api/action`, { type: 'APPROVE_PROPOSAL', id: f.server.state.proposals[0].id })).status, 200);
     assert.equal(f.server.state.speechQueue.length, 1);
+  } finally { await f.close(); }
+});
+
+test('Vite port 5173 origin works for HTTP and cookie-authenticated WebSocket; foreign origins do not', async () => {
+  const f = await fixture({ env: { ADMIN_TOKEN: 'vite-token' } }); let ws: WebSocket | undefined;
+  try {
+    const session = await post(`${f.url}/api/session`, { token: 'vite-token' }, { Origin: 'http://localhost:5173' });
+    assert.equal(session.status, 200);
+    const cookie = session.headers.get('set-cookie')!.split(';')[0];
+    const response = await post(`${f.url}/api/action`, { type: 'SET_TIME', hour: 19 }, { Origin: 'http://localhost:5173', Cookie: cookie });
+    assert.equal(response.status, 200);
+    ws = new WebSocket(`ws://127.0.0.1:${f.port}/ws`, { headers: { Origin: 'http://localhost:5173', Cookie: cookie } });
+    const [snapshot] = await once(ws, 'message'); assert.equal(JSON.parse(snapshot.toString()).state.virtualHour, 19);
+    assert.equal((await post(`${f.url}/api/action`, { type: 'SET_TIME', hour: 1 }, { Origin: 'http://localhost:9999', Cookie: cookie })).status, 403);
+  } finally { ws?.terminate(); await f.close(); }
+});
+
+test('HTTP and WebSocket expose opaque game ids without answer-bank indexes or voter hashes', async () => {
+  const f = await fixture(); let ws: WebSocket | undefined;
+  try {
+    await post(`${f.url}/api/action`, { type: 'START_GAME', game: 'hangman' });
+    const first = await (await fetch(`${f.url}/api/state`)).json();
+    assert.notEqual(first.game.id, f.server.state.game!.id); assert.ok(!first.game.id.includes(':'));
+    assert.equal((await (await fetch(`${f.url}/api/state`)).json()).game.id, first.game.id);
+    ws = new WebSocket(`ws://127.0.0.1:${f.port}/ws`);
+    const [snapshot] = await once(ws, 'message'); assert.equal(JSON.parse(snapshot.toString()).state.game.id, first.game.id);
+    await post(`${f.url}/api/action`, { type: 'STOP_GAME' });
+    await post(`${f.url}/api/action`, { type: 'START_GAME', game: 'poll' });
+    await post(`${f.url}/api/action`, { type: 'GAME_INPUT', value: 'A', user: 'viewer' });
+    const poll = await (await fetch(`${f.url}/api/state`)).json();
+    assert.deepEqual(poll.game.guesses, []); assert.equal(poll.game.votes['0'], 1); assert.equal(f.server.state.game!.guesses.length, 1);
+  } finally { ws?.terminate(); await f.close(); }
+});
+
+test('Automatic external AI never runs in manual mode and discards responses after operator mode/provider/AI changes', async () => {
+  for (const settings of [{ mode: 'manual' }, { aiEnabled: false }, { provider: 'demo' }]) {
+    let release!: (response: Response) => void; let calls = 0;
+    const fetchImpl: typeof fetch = async () => { calls++; return new Promise(resolve => { release = resolve; }); };
+    const f = await fixture({ env: { AI_API_KEY: 'private' }, fetchImpl, tickInterval: 10 });
+    try {
+      await post(`${f.url}/api/action`, { type: 'SETTINGS', settings: { provider: 'openai-compatible', mode: 'manual' } });
+      await post(`${f.url}/api/action`, { type: 'CHAT', user: 'viewer', text: 'Olá, Homer!' });
+      await post(`${f.url}/api/action`, { type: 'SELECT_CHAT', messageId: f.server.state.chat[0].id });
+      await delay(40); assert.equal(calls, 0);
+      await post(`${f.url}/api/action`, { type: 'SETTINGS', settings: { mode: 'auto' } });
+      await waitUntil(() => calls === 1);
+      await post(`${f.url}/api/action`, { type: 'SETTINGS', settings });
+      release(new Response(JSON.stringify({ choices: [{ message: { content: JSON.stringify({ actions: [{ type: 'TALK', character: 'homer', text: 'Resposta externa obsoleta.' }] }) } }] })));
+      await waitUntil(() => f.server.state.logs.some(log => log.message.startsWith('Resposta descartada:')));
+      assert.ok(!f.server.state.speechQueue.some(speech => speech.text === 'Resposta externa obsoleta.'));
+      assert.notEqual(f.server.state.speaking?.text, 'Resposta externa obsoleta.');
+    } finally { await f.close(); }
+  }
+});
+
+test('Shutdown aborts an in-flight provider request and prevents late state mutation', async () => {
+  let providerSignal: AbortSignal | undefined;
+  const fetchImpl: typeof fetch = async (_url, options) => new Promise((_resolve, reject) => { providerSignal = options!.signal!; providerSignal.addEventListener('abort', () => reject(new Error('aborted')), { once: true }); });
+  const f = await fixture({ env: { AI_API_KEY: 'private' }, fetchImpl });
+  try {
+    await post(`${f.url}/api/action`, { type: 'SETTINGS', settings: { provider: 'openai-compatible' } });
+    const pending = post(`${f.url}/api/ai/respond`, {});
+    await waitUntil(() => !!providerSignal);
+    await f.server.close();
+    assert.equal(providerSignal!.aborted, true); assert.equal((await pending).status, 502); assert.equal(f.server.state.speechQueue.length, 0);
   } finally { await f.close(); }
 });
