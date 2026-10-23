@@ -1,0 +1,34 @@
+HOMER AI LIVE — scene recovery inventory
+
+Recovery basis: full original tool-write inputs retained in the scene agent's conversation.
+Restoration performed without redesign or fixes. No dependency installation or changes to package/shared files.
+
+Restored source paths:
+/workspace/homer-ai-live/src/scene/spriteArt.ts
+/workspace/homer-ai-live/src/scene/CharacterSprite.tsx
+/workspace/homer-ai-live/src/scene/Furniture.tsx
+/workspace/homer-ai-live/src/scene/Television.tsx
+/workspace/homer-ai-live/src/scene/RoomContents.tsx
+/workspace/homer-ai-live/src/scene/RoomShell.tsx
+/workspace/homer-ai-live/src/scene/HouseScene.tsx
+
+Regenerated using the same original spriteSvg(id) factory (default arguments):
+/workspace/homer-ai-live/public/sprites/homer.svg
+/workspace/homer-ai-live/public/sprites/marge.svg
+/workspace/homer-ai-live/public/sprites/bart.svg
+/workspace/homer-ai-live/public/sprites/lisa.svg
+/workspace/homer-ai-live/public/sprites/maggie.svg
+
+Known fidelity/verification gaps:
+- Original filesystem is unavailable, so byte-for-byte comparison to original files is impossible.
+- Source was transcribed from the exact retained write commands; no source-content gap is known.
+- SVG generation used built-in Node TypeScript support instead of the original tsx command. The unchanged factory and arguments are identical.
+- The original tsc run was interrupted during environment replacement; no original successful typecheck or browser QA result existed.
+- No scene tests had yet been created before environment replacement.
+
+Known unfinished baseline issues intentionally preserved for the post-baseline validation pass:
+- Door clicks emit door:<id>, whereas original engine validation only admitted the generic object 'door'.
+- Adjacent shells can both render the same door and coplanar shared walls.
+- Picture CanvasTexture disposal has not yet been implemented.
+- Characters currently use generated frontal sprites and bounded billboard yaw; manifest asset replacement and alternative angle selection are not wired.
+- Camera paths, furnishings, overlays and full scene appearance still require browser QA.

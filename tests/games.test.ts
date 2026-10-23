@@ -1,0 +1,21 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { createGame,submitGameInput,tickGame,WORDS,QUESTIONS,normalize } from '../shared/games';
+import { createInitialState,applyAction } from '../shared/engine';
+const NOW=1_800_000_000_000;
+test('word bank contains 50 unique normalized words with hints',()=>{assert.equal(WORDS.length,50);assert.equal(new Set(WORDS.map(w=>w.answer)).size,50);assert.ok(WORDS.every(w=>w.hint));assert.equal(normalize('rosquínha'),'ROSQUINHA');});
+test('hangman reveals letters, rejects repeats, counts errors and wins',()=>{
+ const g=createGame('hangman',NOW,()=>0);assert.equal(g.masked,'_____');
+ assert.equal(submitGameInput(g,'h','a',NOW).ok,true);assert.equal(g.masked,'H____');assert.equal(g.attempts,0);
+ assert.equal(submitGameInput(g,'H','a',NOW).ok,false);
+ submitGameInput(g,'Z','a',NOW);assert.equal(g.attempts,1);
+ submitGameInput(g,'HOMER','a',NOW);assert.equal(g.status,'won');assert.equal(g.score,90);
+ assert.equal(submitGameInput(g,'A','a',NOW).ok,false);
+});
+test('hangman loses after six different incorrect guesses',()=>{const g=createGame('hangman',NOW,()=>0);for(const l of ['A','B','C','D','F','G'])submitGameInput(g,l,'a',NOW);assert.equal(g.status,'lost');assert.match(g.result!,/HOMER/);});
+test('quiz supports letters and option text and resolves score',()=>{const g=createGame('quiz',NOW,()=>0);submitGameInput(g,'Saxofone','a',NOW);assert.equal(g.status,'won');const wrong=createGame('quiz',NOW,()=>0);submitGameInput(wrong,'A','a',NOW);assert.equal(wrong.status,'lost');assert.equal(QUESTIONS.length,10);});
+test('guess game uses hinted word and counts failed answers',()=>{const g=createGame('guess',NOW,()=>0);submitGameInput(g,'Bart','a',NOW);assert.equal(g.attempts,1);submitGameInput(g,'Homer','a',NOW);assert.equal(g.status,'won');});
+test('poll counts unique voters and retains deduplication after snapshot restore',()=>{const g=createGame('poll',NOW,()=>0);assert.equal(submitGameInput(g,'A','ana',NOW).ok,true);assert.equal(submitGameInput(g,'B','ana',NOW).ok,false);const restored=JSON.parse(JSON.stringify(g));assert.equal(submitGameInput(restored,'B','ana',NOW).ok,false);submitGameInput(restored,'B','leo',NOW);assert.equal(restored.score,2);tickGame(restored,restored.endsAt+1);assert.equal(restored.status,'ended');});
+test('challenge requires five unique family names before deadline',()=>{const g=createGame('challenge',NOW);for(const name of ['Homer','Marge','Bart','Lisa','Maggie'])submitGameInput(g,name,'a',NOW);assert.equal(g.status,'won');assert.equal(g.score,500);});
+test('timers expire every game and prevent late input',()=>{for(const type of ['hangman','quiz','guess','poll','challenge'] as const){const g=createGame(type,NOW,()=>0);assert.equal(submitGameInput(g,'A','a',g.endsAt+1).ok,false);assert.notEqual(g.status,'playing');}});
+test('chat commands feed games without enabling arbitrary actions',()=>{const s=createInitialState(NOW);s.game=createGame('hangman',NOW,()=>0);assert.equal(applyAction(s,{type:'CHAT',user:'ana',text:'!letra H'},NOW).ok,true);assert.equal(s.game.masked,'H____');});

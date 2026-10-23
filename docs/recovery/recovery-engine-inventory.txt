@@ -1,0 +1,25 @@
+Recovery inventory — engine agent
+Source: retained original tool-write commands and all subsequently executed patch commands in this agent's conversation context.
+Scope: restoration only; no feature redesign, dependency installation, or edits to types/package/config.
+
+Restored files:
+/workspace/homer-ai-live/shared/data.ts
+/workspace/homer-ai-live/shared/engine.ts
+/workspace/homer-ai-live/shared/games.ts
+/workspace/homer-ai-live/tests/engine.test.ts
+/workspace/homer-ai-live/tests/games.test.ts
+
+Restored patch history:
+- Living↔hall doorway route at x=3.8, z=-4 and approach points.
+- !letra / !resposta / !voto chat command prefixes.
+- Correct Comichão/Coçadinha hints.
+- Persisted anonymous per-game poll voter deduplication.
+- Full-word hangman input acceptance.
+- Shared family-event cadence and disabled-character event conditions.
+- Semiautomatic local chat response proposals.
+- Validated winning poll activity execution/proposal.
+- TypeScript movement test narrowing cast.
+- Additional semiautomatic chat and poll execution tests.
+
+Known fidelity gaps: no known omitted functions, catalog records, tests, or executed source patches. Original files/hash manifests no longer exist in the accessible executor, so byte-for-byte equality cannot be independently proved. Source restored to the last executed version represented by retained commands, without the discussed but never executed garage/kitchen navigation improvements.
+Prior validation evidence from original environment: full suite 41/41 passed, including 27 engine/game tests, 2 audio tests, 12 backend tests. At that time global typecheck's only remaining reported error was missing src/App, which parent was still implementing.

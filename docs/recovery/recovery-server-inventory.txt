@@ -1,0 +1,13 @@
+Recovered server-owned source files from complete retained original apply_patch calls and subsequent patches:
+/workspace/homer-ai-live/server/db.ts
+/workspace/homer-ai-live/server/providers.ts
+/workspace/homer-ai-live/server/index.ts
+/workspace/homer-ai-live/.env.example
+/workspace/homer-ai-live/docs/server.md
+/workspace/homer-ai-live/tests/persistence.test.ts
+/workspace/homer-ai-live/tests/server.test.ts
+/workspace/homer-ai-live/tests/providers.test.ts
+
+Fidelity: no known source-content gaps. Original complete tool-write payloads and every subsequent patch are retained in this agent's context and applied in their final pre-loss state. No redesign or new fixes included.
+Limits: original filesystem byte hashes were not recorded, so byte-for-byte identity cannot be independently checked against the unavailable executor. Filesystem metadata/timestamps are new. Runtime data, test output files, node_modules, and process state are not included.
+Prior verification: 12 backend/persistence/provider tests passed before the final camera-room recovery and clear-memory fixes. The final 13-test run was started, but its completion output was not collected before environment replacement. No tests or dependency installation have been run during this recovery task.

@@ -1,0 +1,6 @@
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { AudioQueue } from '../src/audio/queue';
+const flush=()=>new Promise(resolve=>setTimeout(resolve,10));
+test('audio is sequential, prioritized and deduplicated',async()=>{const q=new AudioQueue();const order:string[]=[];let finish:()=>void=()=>{};q.enqueue({id:'a',priority:1,run:()=>new Promise<void>(resolve=>{order.push('a');finish=resolve})});q.enqueue({id:'b',priority:1,run:async()=>{order.push('b')}});q.enqueue({id:'c',priority:9,run:async()=>{order.push('c')}});q.enqueue({id:'c',priority:9,run:async()=>{order.push('duplicate')}});assert.deepEqual(order,['a']);finish();await flush();assert.deepEqual(order,['a','c','b']);assert.equal(q.size,0)});
+test('pause aborts active audio and discards queued jobs; queue recovers',async()=>{const q=new AudioQueue();let aborted=false;q.enqueue({id:'a',priority:1,run:signal=>new Promise<void>(resolve=>signal.addEventListener('abort',()=>{aborted=true;resolve()}))});q.enqueue({id:'b',priority:1,run:async()=>{throw new Error('must not run')}});q.clear();assert.equal(aborted,true);let played=false;q.enqueue({id:'new',priority:1,run:async()=>{played=true}});await flush();assert.equal(played,true);assert.equal(q.size,0)});
