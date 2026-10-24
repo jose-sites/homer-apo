@@ -1,6 +1,6 @@
 # Substituição de sprites
 
-Os cinco personagens atuais usam desenhos vetoriais provisórios gerados localmente. Não são artes finais nem animações oficiais.
+Os cinco personagens atuais usam desenhos vetoriais 2.5D gerados localmente, redesenhados com cinco expressões, piscadas e boca animada. Não são modelos 3D nem animações oficiais. O arquivo `src/scene/spriteArt.ts` é a fonte; `npx tsx scripts/export-sprites.ts` atualiza os SVGs estáticos usados nos avatares.
 
 Para substituir um personagem, adicione imagens transparentes de proporção 300×420 a esta pasta e edite `manifest.json`:
 

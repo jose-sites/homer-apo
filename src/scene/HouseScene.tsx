@@ -29,6 +29,8 @@ function World({state,onAction,onMetrics,explore,onCameraPose,onFade}:Props&{onF
  const visible=useMemo(()=>{
   if(exterior)return ROOMS.filter(r=>r.floor>=0&&r.floor<2&&!['yard','bathroom'].includes(r.id));
   const ids=new Set([room.id,...room.neighbors]);
+  // Only the two reference rooms need a second shell ring through their open arches.
+  if(['living','kitchen'].includes(room.id)){if(ids.has('hall'))ids.add('upstairs');for(const id of [...ids])ROOMS.find(r=>r.id===id)?.neighbors.forEach(n=>ids.add(n));}
   if(state.movement){const from=ROOMS.find(r=>r.id===state.movement!.from),to=ROOMS.find(r=>r.id===state.movement!.to);if(from){ids.add(from.id);from.neighbors.forEach(id=>ids.add(id));}if(to){ids.add(to.id);to.neighbors.forEach(id=>ids.add(id));} // Entire predefined route loaded during movement, released on arrival.
    for(const point of state.movement.path){const found=ROOMS.find(r=>Math.abs(r.origin[1]-point[1])<.5&&Math.abs(r.origin[0]-point[0])<=r.size[0]/2&&Math.abs(r.origin[2]-point[2])<=r.size[1]/2);if(found)ids.add(found.id);}
   }
@@ -39,7 +41,7 @@ function World({state,onAction,onMetrics,explore,onCameraPose,onFade}:Props&{onF
   <ambientLight intensity={state.power?(night?.35:.55):.12} color={night?'#c5ccd7':'#fff0d9'}/>
   <hemisphereLight args={['#d6f0ff','#9c637d',state.power?.85:.2]}/>
   <directionalLight position={[7,14,9]} intensity={night?.25:2.1} color={night?'#a2c0e1':'#fff0d5'} castShadow={state.settings.quality!=='low'} shadow-mapSize={state.settings.quality==='high'?[1024,1024]:[512,512]} shadow-camera-left={-18} shadow-camera-right={18} shadow-camera-top={18} shadow-camera-bottom={-18} shadow-camera-far={45} shadow-bias={-.001}/>
-  {visible.map(r=><group key={r.id}><RoomShell room={r} state={state} onAction={onAction} activeRoom={detailedRoom} visibleRoomIds={visible.map(v=>v.id)}/>{r.id===detailedRoom?<RoomContents room={r} state={state} onAction={onAction}/>:['hall','basement'].includes(r.kind)&&<group position={r.origin}><Stairs level={r.floor}/></group>}</group>)}
+  {visible.map(r=><group key={r.id}><RoomShell room={r} state={state} onAction={onAction} activeRoom={detailedRoom} visibleRoomIds={visible.map(v=>v.id)}/>{(r.id===detailedRoom||(['living','kitchen'].includes(detailedRoom)&&['living','kitchen'].includes(r.id)))?<RoomContents room={r} state={state} onAction={onAction}/>:['hall','basement'].includes(r.kind)&&<group position={r.origin}><Stairs level={r.floor}/></group>}</group>)}
   <SceneUpdates state={state} fallbackRoom={room.id} onTravelRoom={setTravelRoom}/>
   {exterior&&<Facade night={night}/>}
   {state.weather==='rain'&&<Rain origin={room.origin} paused={state.paused}/>}

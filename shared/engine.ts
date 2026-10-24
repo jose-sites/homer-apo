@@ -1,3 +1,4 @@
+import {LAYOUT_REVISION,STAIR_BOTTOM,STAIR_TOP} from './referenceLayout';
 import { z } from 'zod';
 import { CAMERAS, DOORWAYS, EVENTS, LINES, MAGGIE_EFFECTS, ROOMS, ROOM_NAV_POINTS, doorId } from './data';
 import { createGame, finishGame, submitGameInput, tickGame } from './games';
@@ -55,7 +56,7 @@ export function logEvent(state:LiveState,type:string,message:string,now=Date.now
 export function createInitialState(now=Date.now()):LiveState{
  const settings:Settings={mode:'manual',autoCamera:true,aiEnabled:true,familyEnabled:true,eventsEnabled:true,quality:'medium',adaptiveQuality:true,masterVolume:.7,effectsVolume:.3,familyMin:180,familyMax:360,responseCooldown:15,cameraInterval:25,timeMode:'fixed',timeScale:60,retentionDays:7,cleanOverlay:false,provider:'demo',ttsProvider:'browser'};
  const characters=Object.fromEntries((['homer','marge','bart','lisa','maggie'] as CharacterId[]).map(id=>[id,{id,name:id[0].toUpperCase()+id.slice(1),enabled:true,expression:'neutral',activity:'sitting',room:'living',volume:id==='maggie'?.35:.8}])) as LiveState['characters'];
- const state:LiveState={version:1,startedAt:now,paused:false,settings,characters,homer:{mood:78,energy:83,hunger:34,sleep:18,attention:85,interest:75,lastFamily:0},room:'living',cameraId:'living-family',cameras:clone(CAMERAS),speaking:null,speechQueue:[],chat:[],logs:[],events:clone(EVENTS),lines:clone(LINES),game:null,movement:null,virtualHour:17.5,weather:'clear',power:true,tvChannel:0,doors:{},memory:[],proposals:[],providers:{ai:'Regras locais · sem conexão com IA',tts:'Voz do navegador · requer ativação de áudio'},nextFamilyAt:now+240000};
+ const state:LiveState={version:1,layoutRevision:LAYOUT_REVISION,startedAt:now,paused:false,settings,characters,homer:{mood:78,energy:83,hunger:34,sleep:18,attention:85,interest:75,lastFamily:0},room:'living',cameraId:'living-family',cameras:clone(CAMERAS),speaking:null,speechQueue:[],chat:[],logs:[],events:clone(EVENTS),lines:clone(LINES),game:null,movement:null,virtualHour:17.5,weather:'clear',power:true,tvChannel:0,doors:{},memory:[],proposals:[],providers:{ai:'Regras locais · sem conexão com IA',tts:'Voz do navegador · requer ativação de áudio'},nextFamilyAt:now+240000};
  logEvent(state,'system','Estúdio iniciado. Chat de teste local; integrações externas não conectadas.',now);return state;
 }
 export function selectLine(state:LiveState,who:CharacterId,category?:string,random=Math.random):Line|undefined{
@@ -91,30 +92,30 @@ export function doorwayApproach(room:Room,doorway:Vec3):Vec3[]{
  const points:Vec3[]=[roomPoint(room)];
  const add=(...coords:Array<[number,number]>)=>points.push(...coords.map(([x,z])=>local(x,z)));
  if(room.kind==='hall'){
-  if(dz>0)add([3,2.6],[dx,2.6]);
-  else if(dz<0)add([3,-3.2],[dx,-3.2]);
-  else if(dx<0)add([3,2.6],[-2.8,2.6],[-2.8,0]);
+  if(dz>=room.size[1]/2-.01)add([-1,3.5],[dx,3.5]);
+  else if(dz<=-room.size[1]/2+.01)add([-1,-2],[dx,-2]);
+  else if(dx>0)add([-1,-2],[4.65,-2],[4.65,0]);
  }else if(room.id==='living'){
-  if(dz<0)add([3.8,1.5],[3.8,-2]);
-  else if(dz>0)add([0,1.5]);
-  else if(dx<0)add([-3.3,1.5],[-3.3,0]);
-  else add([3,0]);
+  if(dz<=-room.size[1]/2+.01)add([3.7,-2],[dx,-2]);
+  else if(dz>=room.size[1]/2-.01)add([0,1.8]);
+  else if(dx<0)add([-2.5,1.8],[-2.5,-.8],[-4.4,-.8],[-4.4,dz]);
+  else add([3.7,0]);
  }else if(room.id==='kitchen'){
-  if(dz<0)add([-2.2,-1.5],[0,-1.5]);else add([-2.2,0]);
+  add([3.9,2.7],[3.9,dz]);
  }else if(room.id==='dining'){
-  if(dz<0)add([3.5,-2.4],[dx,-2.4]);
-  else if(dz>0)add([dx,2.6]);
-  else add([-3.5,2.6],[-3.5,0]);
+  if(dz<=-room.size[1]/2+.01)add([3.5,-2.4],[dx,-2.4]);
+  else if(dz>=room.size[1]/2-.01)add([dx,2.6]);
+  else add([Math.sign(dx)*3.5,2.6],[Math.sign(dx)*3.5,0]);
  }else if(room.id==='garage'){
-  if(dz<0)add([1.7,0],[1.7,-3.2],[0,-3.2]);
-  else if(dz>0)add([2.2,3.3],[0,3.3]);
+  if(dz<=-room.size[1]/2+.01)add([1.7,0],[1.7,-3.2],[0,-3.2]);
+  else if(dz>=room.size[1]/2-.01)add([2.2,3.3],[0,3.3]);else if(dx<0)add([2.2,3],[-2.2,3],[-2.2,0]);
  }else if(room.id==='parents'){
-  if(dz<0)add([1.2,-1.5]);else add([1.2,0]);
- }else if(room.id==='bart')add([1.2,0]);
+  if(dz<=-room.size[1]/2+.01)add([1.2,-1.5]);else if(dx<0)add([1.2,2.4],[-3.6,2.4],[-3.6,0]);else add([1.2,0]);
+ }else if(room.id==='bart'){if(dx<0)add([1.2,2.7],[-3.5,2.7],[-3.5,0]);else add([1.2,0]);}
  else if(room.id==='lisa'){
-  if(dz>0)add([dx,1.5]);else add([1.2,2.7],[-3.3,2.7],[-3.3,0]);
+  if(dz>=room.size[1]/2-.01)add([dx,1.5]);else add([1.2,2.7],[Math.sign(dx)*3.6,2.7],[Math.sign(dx)*3.6,0]);
  }else if(room.id==='maggie'){
-  if(dz<0)add([dx,.5]);else add([-2,0]);
+  if(dz<=-room.size[1]/2+.01)add([dx,.5]);else add([-2,0]);
  }else if(room.id==='yard')add([dx,1.5]);
  else if(room.id==='front')add([0,-2],[dx,-2]);
  points.push([...doorway]);
@@ -127,7 +128,7 @@ export function movementWaypoints(from:string,to:string):Vec3[]|null{
   const a=ROOMS.find(r=>r.id===rooms[i-1])!,b=ROOMS.find(r=>r.id===rooms[i])!;
   const ay=a.origin[1],by=b.origin[1];
   if(ay!==by){
-   const bottom=Math.min(ay,by);const stairs:Vec3[]=[[3,bottom,-6.2],[0,bottom,-6.2],[0,bottom+3.6,-10.6],[0,bottom+3.6,-11.2],[3,bottom+3.6,-11.2]];
+   const bottom=Math.min(ay,by);const stairs:Vec3[]=[[-1,bottom,-4.5],[STAIR_BOTTOM[0],bottom,STAIR_BOTTOM[2]],[STAIR_TOP[0],bottom+3.6,STAIR_TOP[2]],[3.1,bottom+3.6,-9.6],[-1,bottom+3.6,-9.6]];
    points.push(...(ay<by?stairs:[...stairs].reverse()),roomPoint(b));
   }else{
    const portal=DOORWAYS[doorId(a.id,b.id)];if(!portal)return null;

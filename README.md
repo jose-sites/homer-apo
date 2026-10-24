@@ -38,6 +38,10 @@ O projeto funciona sem chaves de API: conversa por regras locais, legenda, efeit
 6. No modo Semiautomático, aprove ações em **Memória e ações**. No Automático, o motor executa decisões permitidas, respeitando intervalos e condições.
 7. **Pausar tudo** congela decisões, navegação, eventos e temporizadores do motor. Após reinício, o servidor recupera configurações em pausa; atividades transitórias não são repetidas.
 
+## Revisão de composição e personagens
+
+Sala e cozinha foram reorganizadas seguindo a referência, com novos sprites expressivos e migração das câmeras salvas. Veja [capturas, adaptações da planta e validação](docs/REFERENCE-LAYOUT.md).
+
 ## Revisão visual
 
 Os 16 ambientes receberam cores vibrantes, iluminação quente, móveis e decoração adicionais, preservando planta e navegação. Veja [a revisão visual e as capturas](docs/VISUAL.md).

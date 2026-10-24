@@ -1,5 +1,6 @@
 import type { Room, CameraPreset, Line, EventDefinition, CharacterId, Vec3 } from './types';
 
+import {MIRRORED_ROOMS} from './referenceLayout';
 // Coordinates are room centres. All interior doors lie at room-edge midpoints.
 // Ground floor y=0; first floor y=3.6; basement y=-3.6; attic y=7.2.
 export const ROOMS: Room[] = [
@@ -21,6 +22,9 @@ export const ROOMS: Room[] = [
  {id:'attic',name:'Sótão',floor:2,origin:[0,7.2,-8],size:[10,8],color:'#b68f71',kind:'attic',neighbors:['upstairs']},
 ];
 
+// Reference composition: kitchen left, garage right; mirror connected upper rooms.
+for(const r of ROOMS)if(MIRRORED_ROOMS.includes(r.id))r.origin[0]*=-1;
+
 export const CAMERAS: CameraPreset[] = ROOMS.flatMap((r) => {
  const [x,y,z]=r.origin;
  return [
@@ -35,6 +39,10 @@ CAMERAS.push(
  {id:'front-exterior',name:'742 Evergreen Terrace',room:'front',position:[17,10,23],target:[0,2,-4],fov:49,type:'environment',transition:'fade'},
  {id:'yard-panorama',name:'Quintal · panorâmica',room:'yard',position:[7,3,-13],target:[0,1,-17],fov:62,type:'environment',transition:'fade'},
 );
+
+for(const c of CAMERAS){if(['living-wide','living-front','living-family'].includes(c.id)){c.position=[-1.4,2,3.75];c.target=[0,1.6,-2.7];c.fov=64;}if(['kitchen-wide','kitchen-front'].includes(c.id)){c.position=[-13.6,2.1,3.6];c.target=[-9.9,1.45,-2.4];c.fov=66;}}
+
+for(const c of CAMERAS){if(['hall','upstairs','basement','attic'].some(id=>c.id===id+'-wide')){const r=ROOMS.find(r=>r.id===c.room)!;c.position=[r.origin[0]-3.6,r.origin[1]+2.4,r.origin[2]+3.4];c.target=[r.origin[0]+1,r.origin[1]+1.35,r.origin[2]-.4];c.fov=60;}}
 
 const banks: Record<Exclude<CharacterId,'maggie'>, Record<string,string[]>> = {
  homer: {
@@ -113,11 +121,13 @@ for(const room of ROOMS)for(const neighborId of room.neighbors){
   DOORWAYS[key]=[narrow.origin[0],y,narrow.origin[2]+Math.sign((narrow===room?nz:z)-narrow.origin[2])*narrow.size[1]/2];
  }else DOORWAYS[key]=[(x+nx)/2,y,z];
 }
-DOORWAYS[doorId('living','hall')]=[3.8,0,-4];
+DOORWAYS[doorId('living','hall')]=[3.35,0,-4];
 DOORWAYS[doorId('parents','upstairs')]=[1.2,3.6,-4];
-DOORWAYS[doorId('lisa','maggie')]=[12.8,3.6,-4];
-const localNavPoints:Record<string,[number,number]>={living:[3,1.5],kitchen:[-2.2,2],dining:[3.5,2.6],garage:[2.2,0],parents:[1.2,1.2],bart:[1.2,1.5],lisa:[1.2,1.5],maggie:[-2,.5],yard:[3,1.5]};
+DOORWAYS[doorId('lisa','maggie')]=[-12.8,3.6,-4];
+DOORWAYS[doorId('living','kitchen')]=[-5,0,-2.4];
+DOORWAYS[doorId('kitchen','dining')]=[-6.1,0,-4];
+const localNavPoints:Record<string,[number,number]>={living:[3.7,1.8],kitchen:[2.8,2.7],dining:[3.5,2.6],garage:[2.2,0],parents:[1.2,1.2],bart:[1.2,1.5],lisa:[1.2,1.5],maggie:[-2,.5],yard:[3,1.5]};
 export const ROOM_NAV_POINTS:Record<string,Vec3>=Object.fromEntries(ROOMS.map(room=>{
- const [x,z]=localNavPoints[room.id]??(['hall','basement','attic'].includes(room.kind)?[3,0]:[0,0]);
+ const [x,z]=localNavPoints[room.id]??(['hall','basement','attic'].includes(room.kind)?[-1,0]:[0,0]);
  return [room.id,[room.origin[0]+x,room.origin[1],room.origin[2]+z] as Vec3];
 }));

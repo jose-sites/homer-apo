@@ -15,9 +15,9 @@ test('all rooms are reachable and routes use actual stair landings',()=>{
  for(const a of ROOMS)for(const b of ROOMS){const path=findRoomPath(a.id,b.id);assert.ok(path);assert.equal(path[0],a.id);assert.equal(path.at(-1),b.id);}
  assert.equal(findRoomPath('unknown','living'),null);
  const path=movementWaypoints('living','bart')!;
- assert.ok(path.some(p=>p[0]===3.8&&p[2]===-4),'living route uses door beside sofa');
- assert.ok(path.some(p=>p[1]===0&&p[2]===-6.2),'stair bottom');
- assert.ok(path.some(p=>p[1]===3.6&&p[2]===-10.6),'stair top');
+ assert.ok(path.some(p=>p[0]===3.35&&p[2]===-4),'living route uses door beside sofa');
+ assert.ok(path.some(p=>p[1]===0&&p[2]===-4.6),'stair bottom');
+ assert.ok(path.some(p=>p[1]===3.6&&p[2]===-9),'stair top');
 });
 
 test('movement is validated, serialized and completes at destination',()=>{
@@ -173,7 +173,7 @@ test('every indoor approach stays inside its room and reaches exactly the shared
 });
 
 test('garage/front and dining/yard routes exit through portals before travelling sideways outdoors',()=>{
- for(const [a,b,portal]of [['garage','front',[-10,0,4]],['dining','yard',[10,0,-12]]] as const){
+ for(const [a,b,portal]of [['garage','front',[10,0,4]],['dining','yard',[-10,0,-12]]] as const){
   const path=movementWaypoints(a,b)!;
   assert.deepEqual(DOORWAYS[doorId(a,b)],portal);
   const portalIndex=path.findIndex(p=>p.every((v,i)=>v===portal[i]));assert.ok(portalIndex>0);
@@ -185,10 +185,11 @@ test('garage/front and dining/yard routes exit through portals before travelling
 test('navigation approaches avoid the car, dining table, kitchen table and staircase shaft',()=>{
  const obstacles:Record<string,{x:[number,number];z:[number,number]}[]>={
   garage:[{x:[-1.4,1.4],z:[-2.7,2.2]}],
-  kitchen:[{x:[-.8,1.8],z:[-.25,1.45]}],
+  kitchen:[{x:[-2.55,.55],z:[-.6,1.25]},{x:[2.05,3.55],z:[-3.8,-2.45]}],
+  living:[{x:[-2.9,2],z:[-3.65,-2.1]},{x:[-1.9,1.1],z:[-.8,.7]},{x:[-4.4,-2.6],z:[.15,1.1]}],
   dining:[{x:[-2.1,2.1],z:[-1.2,1.2]}],
-  hall:[{x:[-1.4,1.4],z:[-2.9,2]}],
-  upstairs:[{x:[-1.4,1.4],z:[-2.9,2]}],
+  hall:[{x:[1.85,4.35],z:[-1.1,3.1]}],
+  upstairs:[{x:[1.85,4.35],z:[-1.1,3.1]}],
   parents:[{x:[-2.9,.3],z:[-3.3,.1]}],
   maggie:[{x:[-1.3,1.3],z:[-2.7,-.9]}],
  };

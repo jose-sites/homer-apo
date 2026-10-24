@@ -1,7 +1,7 @@
 /** Visual-only palette. Room IDs, world coordinates and navigation stay in shared/data. */
 export interface RoomLook { wall:string; trim:string; floor:string[]; accent:string }
 export const ROOM_LOOKS:Record<string,RoomLook>={
- living:{wall:'#ed78a0',trim:'#ffd1ac',floor:['#e79a49','#efa653','#dc883c'],accent:'#913caa'},
+ living:{wall:'#ed78a0',trim:'#ffd1ac',floor:['#168c75','#168c75'],accent:'#913caa'},
  kitchen:{wall:'#f1b353',trim:'#ffda8a',floor:['#996ac3','#fff2d4'],accent:'#8550b9'},
  dining:{wall:'#e97b97',trim:'#ffd39d',floor:['#e6a453','#edb363','#d99042'],accent:'#198e92'},
  hall:{wall:'#ed819b',trim:'#ffd2a3',floor:['#d79043','#e4a555'],accent:'#784091'},

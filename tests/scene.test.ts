@@ -20,7 +20,7 @@ test('adjacent interior rooms render exactly one shared wall, owned by active ro
 });
 test('stair landings support both path approaches without filling the shaft',()=>{
  const supported=(x:number,z:number)=>LANDING_SLABS.some(s=>Math.abs(x-s.p[0])<=s.s[0]/2&&Math.abs(z-s.p[2])<=s.s[2]/2);
- assert.ok(supported(0,1.8));assert.ok(supported(0,-3.2));assert.ok(supported(3,-3.2));assert.ok(!supported(0,-.5));
+ assert.ok(supported(3.1,3.4));assert.ok(supported(3.1,-1.6));assert.ok(supported(-1,-1.6));assert.ok(!supported(3.1,1));
 });
 test('path interpolation follows supplied corners instead of shortcutting through rooms',()=>{
  const path:[number,number,number][]=[[0,0,0],[4,0,0],[4,3,0]];

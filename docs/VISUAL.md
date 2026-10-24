@@ -1,5 +1,7 @@
 # Revisão visual dos 16 ambientes
 
+Este documento registra a primeira revisão de cores e decoração. A revisão posterior de composição e personagens está em [REFERENCE-LAYOUT.md](REFERENCE-LAYOUT.md).
+
 A revisão usa a nova referência como direção artística e mantém a aplicação existente. O ponto anterior está na tag `visual-before-20261023`.
 
 ## Comparação visual

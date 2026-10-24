@@ -1,3 +1,5 @@
+import {ROOMS} from '../shared/data';
+import {LAYOUT_REVISION,MIRRORED_ROOMS} from '../shared/referenceLayout';
 import express, { type NextFunction, type Request, type Response } from 'express';
 import { createServer as createHttpServer } from 'node:http';
 import { randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
@@ -34,7 +36,17 @@ export function recoverState(saved: unknown, fresh: LiveState, now = Date.now())
   if (!applyAction(candidate, { type: 'SETTINGS', settings: saved.settings }, now).ok) return fresh;
   // Catalog entries pass the same validation used by the operator. Existing ids
   // retain fresh defaults unless a valid persisted definition can replace them.
-  for (const camera of saved.cameras as unknown[]) applyAction(candidate, { type: 'ADD_CAMERA', camera }, now);
+  for (const entry of saved.cameras as unknown[]) {
+    let camera=entry;
+    if(saved.layoutRevision!==LAYOUT_REVISION&&entry&&typeof entry==='object'){
+      const old=entry as {room:string;position:number[];target:number[]};
+      if(MIRRORED_ROOMS.includes(old.room)&&Array.isArray(old.position)&&Array.isArray(old.target)){
+        const room=ROOMS.find(r=>r.id===old.room)!;const delta=room.origin[0]*2;
+        camera={...old,position:[old.position[0]+delta,...old.position.slice(1)],target:[old.target[0]+delta,...old.target.slice(1)]};
+      }
+    }
+    applyAction(candidate, { type: 'ADD_CAMERA', camera }, now);
+  }
   for (const line of saved.lines as unknown[]) applyAction(candidate, { type: 'ADD_LINE', line }, now);
   for (const event of saved.events as Array<Record<string, unknown>>) {
     if (!record(event)) continue;

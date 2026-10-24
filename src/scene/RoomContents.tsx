@@ -1,3 +1,5 @@
+import {ReferenceLiving,ReferenceKitchen} from './ReferenceRooms';
+import {STAIR_OFFSET} from '../../shared/referenceLayout';
 import type {Action, LiveState, Room} from '../../shared/types';
 import {Box,Ball,Cylinder,Rounded,Plant,Lamp,Table,Chair,Bookcase,Bed,Rug,Sofa,Donut,Mug,Picture,Window} from './Furniture';
 import { Television } from './Television';
@@ -9,37 +11,11 @@ export function RoomContents({room,state,onAction}:{room:Room;state:LiveState;on
  const night=state.virtualHour<6||state.virtualHour>18;
  const common=<><Window p={[-4.87,2,2.45]} rotation={Math.PI/2} night={night}/><Plant p={[-4.25,0,-3.2]} scale={1.1}/></>;
  return <group position={room.origin}>
-  <RoomDetails room={room} power={state.power} night={night}/>
-  {room.kind==='living'&&<>
-   <group position={[-.45,0,0]} scale={[.85,1,1]}><Sofa/></group>
-   <Rug p={[-.3,.015,-.05]} s={[6.9,.035,4.1]} c="#ef4584" oval/>
-   <Table p={[-.3,0,-.25]} s={[3.35,.57,1.25]}/>
-   <Cylinder p={[-.4,.685,-.25]} r={.48} h={.025} c="#e8cfaa"/>
-   <Donut p={[-.55,.76,-.23]}/><Donut p={[-.14,.77,-.22]} scale={.83}/><Mug p={[.7,.66,-.43]}/>
-   <Box p={[-1.26,.674,.04]} s={[.62,.025,.44]} c="#c57064" r={[0,.2,0]}/><Box p={[-1.25,.69,.04]} s={[.4,.01,.24]} c="#e6bd6e" r={[0,.2,0]}/>
-   <Box p={[.71,.69,.17]} s={[.18,.045,.43]} c="#3a4143" r={[0,-.1,0]}/>
-   <Table p={[-4.15,0,-2.65]} s={[.85,.72,.85]}/><Lamp p={[-4.15,.79,-2.65]} on={state.power}/>
-   <Picture p={[-.5,2.54,-3.86]} size={[1.8,1.2]}/><Picture p={[2.4,2.5,-3.85]} size={[.65,.86]} kind="family"/>
-   <Window p={[-4.87,2,-2.4]} rotation={Math.PI/2} night={night}/>
-   <Plant p={[4.25,0,2.9]} scale={1.4}/><Television state={state} onAction={onAction}/>
-   <Box p={[4.7,1.25,-1.3]} s={[.16,.9,.55]} c="#90593a"/>
-  </>}
-  {room.kind==='kitchen'&&<>
-   {common}
-   <group position={[-3.35,0,-3.25]} onClick={e=>{e.stopPropagation();onAction({type:'INTERACT_WITH_OBJECT',object:'fridge'});}}>
-    <Box p={[0,1.28,0]} s={[1.45,2.56,1.25]} c="#9acb38"/><Box p={[0,1.25,.65]} s={[1.2,2.3,.03]} c="#5d6857"/>
-    <group position={[-.73,0,.64]} rotation={[0,state.doors.fridge?-1.2:0,0]}><Box p={[.72,1.28,0]} s={[1.43,2.5,.13]} c="#a4d33b"/><Box p={[.72,1.8,.09]} s={[1.43,.035,.02]} c="#477d38"/><Box p={[1.23,1.22,.13]} s={[.07,.55,.07]} c="#477d38"/><Box p={[.6,1.4,.1]} s={[.29,.32,.02]} c="#f1ce6f" r={[0,0,-.1]}/><Box p={[.88,1.54,.1]} s={[.2,.28,.03]} c="#f0e3b9" r={[0,0,.1]}/></group>
-    {state.doors.fridge&&[.6,1.1,1.65,2.1].map(y=><group key={y}><Box p={[0,y,0]} s={[1.1,.05,.95]} c="#ece4d0"/><Cylinder p={[.3,y+.18,.15]} r={.12} h={.32} c="#d6ad70"/><Box p={[-.25,y+.2,.15]} s={[.25,.4,.2]} c="#f1ebe0"/></group>)}
-   </group>
-   {[-1.8,2,3.6].map((x,i)=><group key={x}><Box p={[x,.47,-3.25]} s={[1.52,.94,1.2]} c="#a66bd0"/><Box p={[x,1,-3.25]} s={[1.58,.13,1.35]} c="#f7bd4c"/><Box p={[x,.46,-2.62]} s={[1.3,.68,.05]} c="#9b5dbd"/><Box p={[x,.7,-2.57]} s={[.25,.04,.04]} c="#e4c67c"/>{i!==1&&<><Box p={[x,2.45,-3.5]} s={[1.52,1.02,.68]} c="#b582d7"/><Box p={[x,2.45,-3.13]} s={[1.32,.8,.04]} c="#a06bc8"/><Box p={[x,2.2,-3.08]} s={[.24,.04,.04]} c="#e1bf74"/></>}</group>)}
-   <Box p={[-1.8,1.08,-3.2]} s={[1,.045,.78]} c="#657f7c"/><Box p={[-1.8,1.09,-3.2]} s={[.75,.03,.55]} c="#a9b8aa"/><Cylinder p={[-1.8,1.31,-3.61]} r={.04} h={.5} c="#b8c2ae"/>
-   <Box p={[2,1.08,-3.2]} s={[1.35,.06,1.1]} c="#c2c5b4"/>{[-1,1].flatMap(x=>[-1,1].map(z=><Cylinder key={`${x}${z}`} p={[2+x*.33,1.13,-3.2+z*.25]} r={.18} h={.035} c="#424e4c"/>))}
-   <Box p={[2,.55,-2.57]} s={[1.13,.65,.04]} c="#536061"/><Box p={[2,2.2,-3.35]} s={[1.5,.3,1.2]} c="#b9b9a0"/>
-   <Table p={[.5,0,.6]} s={[2.5,.8,1.6]} c="#369ed3"/><Chair p={[-1.3,0,.5]} r={Math.PI/2}/><Chair p={[2.3,0,.5]} r={-Math.PI/2}/><Mug p={[.8,.9,.55]}/><Donut p={[.3,.94,.55]}/>
-   <Window p={[4.87,2,1.8]} rotation={-Math.PI/2} night={night}/>
-  </>}
+  {!['living','kitchen'].includes(room.id)&&<RoomDetails room={room} power={state.power} night={night}/>}
+  {room.kind==='living'&&<ReferenceLiving state={state} onAction={onAction}/>}
+  {room.kind==='kitchen'&&<ReferenceKitchen state={state} onAction={onAction}/>}
   {room.kind==='dining'&&<>{common}<Rug s={[6,.035,4.5]} c="#178c92"/><Table s={[4,.9,2.15]} c="#9d6947"/>{[-1.1,1.1].flatMap(x=>[-1,1].map(z=><Chair key={`${x}${z}`} p={[x,0,z*1.65]} r={z<0?0:Math.PI}/>))}<Chair p={[-2.55,0,0]} r={Math.PI/2}/><Chair p={[2.55,0,0]} r={-Math.PI/2}/><Cylinder p={[0,1.12,0]} r={.19} h={.35} c="#649c87"/><Plant p={[0,1.25,0]} scale={.45}/><Bookcase p={[-3,0,-3.45]}/><Bookcase p={[3,0,-3.45]}/><Picture p={[0,3.05,-3.85]} size={[1.3,.55]} kind="family"/></>}
-  {room.kind==='hall'&&<><Stairs level={room.floor}/><Rug p={[3.5,.02,0]} s={[1.6,.035,5.7]} c="#108e7e"/>{[1,2,3].map((i)=><Picture key={i} p={[4.84,1.2+i*.45,-3+i*1.5]} size={[.65,.85]} rotation={-Math.PI/2} kind="family"/>)}<Table p={[-3.6,0,-2.9]} s={[1.6,.9,.7]}/><Lamp p={[-3.6,.98,-2.9]} on={state.power}/><Plant p={[-3.8,0,2.8]}/></>}
+  {room.kind==='hall'&&<><Stairs level={room.floor}/><Rug p={[-.5,.02,0]} s={[1.6,.035,5.7]} c="#108e7e"/>{[1,2,3].map((i)=><Picture key={i} p={[4.84,1.2+i*.45,-3+i*1.5]} size={[.65,.85]} rotation={-Math.PI/2} kind="family"/>)}<Table p={[-3.6,0,-2.9]} s={[1.6,.9,.7]}/><Lamp p={[-3.6,.98,-2.9]} on={state.power}/><Plant p={[-3.8,0,2.8]}/></>}
   {['bedroom','bart','lisa'].includes(room.kind)&&<>
    {common}<Bed p={[-1.3,0,-1.55]} color={room.kind==='bart'?'#ef4937':room.kind==='lisa'?'#b349bf':'#ce4d95'} single={room.kind!=='bedroom'}/>
    <Rug p={[-.7,.015,.7]} s={[5.4,.035,3.8]} c={room.kind==='lisa'?'#e85b65':room.kind==='bart'?'#268c68':'#1696ad'}/>
@@ -59,14 +35,14 @@ export function RoomContents({room,state,onAction}:{room:Room;state:LiveState;on
   {room.kind==='exterior'&&<Front/>}
   {(Object.values(state.characters)).map(character=>{
    if(character.id==='homer'&&state.movement)return null;if(character.room!==room.id)return null;
-   const positions={homer:[-2.45,.12,-1.69],marge:[-.88,.12,-1.72],bart:[.55,.12,-1.68],lisa:[1.62,.12,-1.67],maggie:[2.5,.42,-1.65]} as const;
-   const heights={homer:2.6,marge:3,bart:2.2,lisa:2.12,maggie:1.8};
+   const positions={homer:[-2,.08,-1.9],marge:[-.95,.08,-2],bart:[.05,.08,-1.87],lisa:[.85,.08,-1.85],maggie:[1.55,.45,-2]} as const;
+   const heights={homer:2.3,marge:2.72,bart:1.72,lisa:1.6,maggie:1.03};
    const p=room.kind==='living'?[...positions[character.id]]:[-1,0,-.7];
    return <CharacterSprite key={character.id} character={character} position={p as [number,number,number]} height={heights[character.id]} speech={state.speaking} paused={state.paused}/>;
   })}
  </group>
 }
-export function Stairs({level=0}:{level?:number}){return <group>{Array.from({length:18},(_,i)=><Box key={i} p={[0,(i+1)*.1,-(-1.5+(i+.5)*4/18)]} s={[2.3,(i+1)*.2,4/18+.015]} c={i%2?'#a46b44':'#b77c50'}/>)}{[-1.25,1.25].map(x=><group key={x}>{Array.from({length:9},(_,i)=><Cylinder key={i} p={[x,.95+i*.4,1.5-i*.5]} r={.035} h={1.2} c={level<0?'#98592d':'#873e9b'}/>)}<Cylinder p={[x,2.75,-.5]} r={.065} h={5.38} c={level<0?'#7d4727':'#693183'} rotation={[-.838,0,0]}/></group>)}<Box p={[0,-.04,2]} s={[2.5,.08,1]} c="#bb9471"/></group>}
+export function Stairs({level=0}:{level?:number}){return <group position={STAIR_OFFSET}>{Array.from({length:18},(_,i)=><Box key={i} p={[0,(i+1)*.1,-(-1.5+(i+.5)*4/18)]} s={[2.3,(i+1)*.2,4/18+.015]} c={i%2?'#a46b44':'#b77c50'}/>)}{[-1.25,1.25].map(x=><group key={x}>{Array.from({length:9},(_,i)=><Cylinder key={i} p={[x,.95+i*.4,1.5-i*.5]} r={.035} h={1.2} c={level<0?'#98592d':'#873e9b'}/>)}<Cylinder p={[x,2.75,-.5]} r={.065} h={5.38} c={level<0?'#7d4727':'#693183'} rotation={[-.838,0,0]}/></group>)}<Box p={[0,-.04,2]} s={[2.5,.08,1]} c="#bb9471"/></group>}
 function Car(){return <group position={[0,0,-.3]}>
  {[-1,1].map(x=><group key={x}><Box p={[x*1.037,1.4,-.25]} s={[.035,.6,1.95]} c="#4b96b6"/><Box p={[x*1.06,1.42,-.3]} s={[.04,.65,.08]} c="#df6bad"/><Box p={[x*1.18,.78,0]} s={[.04,.045,3.6]} c="#aa4280"/>{[-.7,.5].map(z=><Box key={z} p={[x*1.19,1.02,z]} s={[.035,.05,.24]} c="#eee0d3"/>)}{[-1.37,1.37].map(z=><group key={z}><Cylinder p={[x*1.29,.48,z]} r={.3} h={.025} rotation={[0,0,Math.PI/2]} c="#aeb9c7"/><Cylinder p={[x*1.31,.48,z]} r={.18} h={.03} rotation={[0,0,Math.PI/2]} c="#556474"/></group>)}</group>)}
  <Box p={[0,.8,2.255]} s={[.9,.28,.02]} c="#505a61"/>{[-.3,-.15,0,.15,.3].map(x=><Box key={x} p={[x,.81,2.28]} s={[.04,.23,.025]} c="#cbd2d5"/>)}

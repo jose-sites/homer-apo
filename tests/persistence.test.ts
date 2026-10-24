@@ -51,3 +51,12 @@ test('Malformed or incompatible recovery data falls back to a valid fresh state'
   const fresh = createInitialState();
   for (const value of [null, 'bad json', [], { settings: {} }, { ...fresh, settings: { ...fresh.settings, masterVolume: 10000 } }]) assert.equal(recoverState(value, fresh), fresh);
 });
+
+test('layout migration preserves custom cameras and only translates their room once',()=>{
+ const old=createInitialState();delete old.layoutRevision;
+ old.cameras.push({id:'operator-kitchen',room:'kitchen',name:'Minha cozinha',position:[11,2,2],target:[10,1,-2],fov:50,type:'wide',transition:'fade'});
+ const recovered=recoverState(old,createInitialState());
+ const camera=recovered.cameras.find(c=>c.id==='operator-kitchen')!;
+ assert.deepEqual(camera.position,[-9,2,2]);assert.deepEqual(camera.target,[-10,1,-2]);assert.equal(recovered.layoutRevision,2);
+ const again=recoverState(recovered,createInitialState());assert.deepEqual(again.cameras.find(c=>c.id===camera.id),camera);
+});
