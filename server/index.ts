@@ -11,7 +11,7 @@ import { z } from 'zod';
 import { createInitialState, applyAction, tick } from '../shared/engine.ts';
 import type { LiveState } from '../shared/types.ts';
 import { StateDatabase } from './db.ts';
-import { AudioProvider, generateActions, localReply, providerCapabilities, ProviderError, type ProviderEnvironment } from './providers.ts';
+import { AudioProvider, shouldComment, generateActions, localReply, providerCapabilities, ProviderError, type ProviderEnvironment } from './providers.ts';
 
 export interface ServerOptions {
   dataDir?: string;
@@ -214,7 +214,7 @@ export function createServer(options: ServerOptions = {}) {
     const provider = state.settings.provider;
     lastAIAt = Date.now();
     try {
-      const prompt = message?.text || 'Cumprimente o chat e comente sua atividade atual.';
+      const prompt = message?.text || 'O chat está quieto. Faça um comentário espontâneo breve sobre seu estado ou o que aconteceu recentemente, sem repetir a última fala.';
       const actions = provider === 'demo' ? [localReply(prompt)] : await generateActions(state, prompt, env, options.fetchImpl, shutdown.signal);
       if (closed || generation !== aiGeneration || state.paused || !state.settings.aiEnabled || automatic && state.settings.mode === 'manual') throw new ProviderError('Resposta descartada: a operação ou configuração da IA mudou durante a requisição.', 409);
       // Validate an entire response against a clone before any real mutations.
@@ -229,6 +229,9 @@ export function createServer(options: ServerOptions = {}) {
         else { const result = applyAction(state, action, Date.now()); if (!result.ok) throw new ProviderError(result.error || 'Ação indisponível.'); }
       }
       state.proposals = state.proposals.slice(-20);
+      const spoken = actions.filter((a:any)=>a.type==='TALK').map((a:any)=>String(a.text).slice(0,350));
+      state.memory.push(`${message ? 'Chat: '+message.text.slice(0,140) : 'Comentário espontâneo'} · ${state.settings.mode === 'semi' ? 'Sugestão ainda não executada' : 'Homer'}: ${spoken.join(' ')}`);
+      state.memory=state.memory.slice(-30);
       if (message) { message.selected = false; processedMessages.add(message.id); }
       providerError = null;
       event('ai', provider === 'demo' ? 'Resposta produzida pelo banco local de demonstração.' : 'Resposta recebida da API e validada pelo motor.');
@@ -285,6 +288,7 @@ export function createServer(options: ServerOptions = {}) {
         if (!state.paused && state.settings.mode !== 'manual' && state.settings.aiEnabled && state.settings.provider === 'openai-compatible' && !aiBusy && now - lastAIAt >= state.settings.responseCooldown * 1000) {
           const selected = state.chat.find(m => m.selected && !processedMessages.has(m.id));
           if (selected) { processedMessages.add(selected.id); void respond(selected.id, true).catch(() => undefined); }
+          else if (shouldComment(state, now, lastAIAt, boot)) void respond(undefined, true).catch(() => undefined);
         }
         if (processedMessages.size > 200) { const current = new Set(state.chat.map(m => m.id)); for (const id of processedMessages) if (!current.has(id)) processedMessages.delete(id); }
         broadcast();
