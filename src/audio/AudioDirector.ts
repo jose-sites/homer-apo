@@ -18,7 +18,7 @@ export class AudioDirector {
   if(speech.character==='maggie'||speech.effect){await this.effect(speech.effect||'pacifier',speech.character,signal);return}
   if(state.settings.ttsProvider==='silent')return;
   if(state.settings.ttsProvider==='openai-compatible'){
-   try{const response=await fetch('/api/tts',{method:'POST',headers:{'Content-Type':'application/json',...authHeaders()},body:JSON.stringify({text:speech.text,character:speech.character}),signal:AbortSignal.any([signal,AbortSignal.timeout(20000)])});if(!response.ok)throw new Error('TTS externo indisponível');const buffer=await this.context!.decodeAudioData(await response.arrayBuffer());if(signal.aborted)return;await this.playBuffer(buffer,speech.character,signal);return}catch(error){if(signal.aborted)return;this.onStatus('TTS externo falhou; usando a voz disponível no navegador.')}
+   try{const response=await fetch('/api/tts',{method:'POST',headers:{'Content-Type':'application/json',...authHeaders()},body:JSON.stringify({text:speech.text,character:speech.character}),signal:AbortSignal.any([signal,AbortSignal.timeout(65000)])});if(!response.ok)throw new Error('TTS externo indisponível');const buffer=await this.context!.decodeAudioData(await response.arrayBuffer());if(signal.aborted)return;await this.playBuffer(buffer,speech.character,signal);return}catch(error){if(signal.aborted)return;this.onStatus('TTS externo falhou; usando a voz disponível no navegador.')}
   }
   await this.browserSpeech(speech,signal);
   }finally{if(this.activeSpeech?.id===speech.id)this.activeSpeech=null}

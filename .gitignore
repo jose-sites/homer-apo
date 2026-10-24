@@ -4,3 +4,16 @@ data/
 .env
 *.log
 test-results/
+.env.*
+!.env.example
+**/.env
+**/.env.*
+!**/.env.example
+credentials/
+secrets/
+*.pem
+*.key
+*.p12
+*.pfx
+*credentials*.json
+*service-account*.json

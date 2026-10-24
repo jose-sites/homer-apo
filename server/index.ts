@@ -1,3 +1,4 @@
+import {loadEnvironment,configurationWarnings} from './config.ts';
 import {ROOMS} from '../shared/data';
 import {LAYOUT_REVISION,MIRRORED_ROOMS} from '../shared/referenceLayout';
 import express, { type NextFunction, type Request, type Response } from 'express';
@@ -82,7 +83,7 @@ export function createServer(options: ServerOptions = {}) {
   const db = new StateDatabase(options.databasePath || join(dataDir, 'homer.sqlite'));
   const state = recoverState(db.load(), createInitialState());
   const shutdown = new AbortController();
-  const audio = new AudioProvider(join(dataDir, 'audio-cache'), env, options.fetchImpl, shutdown.signal);
+  const audio = new AudioProvider(join(dataDir, 'audio-cache'), env, options.fetchImpl, shutdown.signal, message=>{ttsStatus=message;event('audio',message);broadcast();});
   const app = express();
   const httpServer = createHttpServer(app);
   const wss = new WebSocketServer({ noServer: true, maxPayload: 1024 });
@@ -103,10 +104,12 @@ export function createServer(options: ServerOptions = {}) {
   let lastTick = Date.now();
   let persistenceError: string | null = null;
   let providerError: string | null = null;
+  let ttsStatus: string | null = null;
+  for(const warning of configurationWarnings(env))event('configuration',warning);
 
   function updateProviderStatus() {
     state.providers.ai = state.settings.provider === 'demo' ? 'Demonstração · regras locais' : capabilities.ai.configured ? 'API configurada · não verificada' : 'API não configurada';
-    state.providers.tts = state.settings.ttsProvider === 'browser' ? 'Voz do navegador' : state.settings.ttsProvider === 'silent' ? 'Legendas · sem voz' : capabilities.tts.configured ? 'API configurada · não verificada' : 'API não configurada';
+    state.providers.tts = state.settings.ttsProvider === 'browser' ? 'Voz do navegador' : state.settings.ttsProvider === 'silent' ? 'Legendas · sem voz' : ttsStatus || (capabilities.tts.configured ? 'API configurada · não verificada' : 'API não configurada');
   }
   updateProviderStatus();
   function event(type: string, message: string) {
@@ -314,8 +317,7 @@ export function createServer(options: ServerOptions = {}) {
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  if (existsSync('.env')) process.loadEnvFile('.env');
-  const runtime = createServer();
+  const runtime = createServer({env:loadEnvironment()});
   runtime.start().catch(error => { console.error(JSON.stringify({ level: 'error', event: 'startup_failed', message: error instanceof Error ? error.message : 'Erro de inicialização.' })); process.exitCode = 1; });
   for (const signal of ['SIGINT', 'SIGTERM'] as const) process.once(signal, () => { void runtime.close().then(() => process.exit(0)); });
 }

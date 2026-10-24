@@ -26,3 +26,5 @@ Cache, coalescência, limite de 8 MB, timeout de 30 segundos, erros HTTP sanitiz
 A IA recebe estado, família, eventos e memória recente. As respostas entram na memória limitada a 30 registros e todas as ações passam pelo validador existente. No modo automático externo, após dois minutos sem chat nem resposta, pode comentar espontaneamente se não houver fala, fila, deslocamento ou jogo. Manual e semiautomático não recebem esse disparo. O modo local conserva seu comportamento anterior.
 
 Verificação: testes com respostas HTTP controladas para contrato Fish, cache, credenciais ausentes e HTTP 401/429/500; teste do contexto de IA; suíte existente e build. Autenticação real, qualidade da voz, sotaque e latência dependem das credenciais.
+
+Atualização: a configuração de dois provedores e a troca automática estão descritas em [API-SETUP.md](API-SETUP.md); use esse guia e o `.env.example` atual.

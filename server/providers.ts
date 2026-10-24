@@ -1,3 +1,4 @@
+import {ttsOrder,configured,configurationWarnings,numeric} from './config.ts';
 import { createHash } from 'node:crypto';
 import { mkdir, readdir, readFile, stat, unlink, writeFile, rename } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -12,7 +13,7 @@ export class ProviderError extends Error {
 export function providerCapabilities(env: ProviderEnvironment) {
   return {
     ai: { configured: !!(env.AI_API_KEY || env.OPENAI_API_KEY), name: (env.AI_API_KEY || env.OPENAI_API_KEY) ? 'OpenAI-compatible' : 'Motor local de demonstração', model: env.AI_MODEL || 'gpt-4o-mini' },
-    tts: { configured: env.TTS_PROVIDER === 'fish' ? !!env.FISH_API_KEY : !!(env.TTS_API_KEY || env.OPENAI_API_KEY), name: env.TTS_PROVIDER === 'fish' ? 'Fish Audio' : (env.TTS_API_KEY || env.OPENAI_API_KEY) ? 'OpenAI-compatible' : 'Voz do navegador / legendas', model: env.TTS_PROVIDER === 'fish' ? (env.FISH_MODEL || 's2.1-pro') : env.TTS_MODEL || 'gpt-4o-mini-tts' },
+    tts: {configured:ttsOrder(env).some(p=>configured(env,p)),name:ttsOrder(env).join(' → '),model:env.FISH_MODEL||'s2.1-pro',warnings:configurationWarnings(env)},
     chat: { connected: false, name: 'Chat local de teste', platforms: [] as string[] },
   };
 }
@@ -84,16 +85,28 @@ export function localReply(message: string): Action {
 
 export class AudioProvider {
   private inFlight = new Map<string, Promise<Buffer>>();
+  private chains=new Map<string,Promise<Buffer>>();
   private maxBytes = 64 * 1024 * 1024;
-  constructor(private directory: string, private env: ProviderEnvironment, private fetchImpl: typeof fetch = fetch, private shutdownSignal?: AbortSignal) {}
+  constructor(private directory: string, private env: ProviderEnvironment, private fetchImpl: typeof fetch = fetch, private shutdownSignal?: AbortSignal, private onStatus:(message:string)=>void=()=>{}) {}
   async synthesize(text: string, character: CharacterId): Promise<Buffer> {
-    const fish = this.env.TTS_PROVIDER === 'fish';
+    const id=JSON.stringify({text,character});const pending=this.chains.get(id);if(pending)return pending;
+    const run=(async()=>{const errors:string[]=[];for(const provider of ttsOrder(this.env)){
+      if(this.shutdownSignal?.aborted)throw new ProviderError('Geração cancelada.',503);
+      if(!configured(this.env,provider)){errors.push(`${provider}: não configurado`);continue}
+      try{const result=await this.synthesizeOne(text,character,provider);this.onStatus(errors.length?`Voz: ${provider} utilizado após falha do principal.`:`Voz: ${provider} disponível.`);return result}
+      catch(error){errors.push(`${provider}: ${error instanceof ProviderError?error.message:'falha de geração'}`)}
+    }const message=`TTS indisponível (${errors.join('; ')}). Voz do navegador/legendas disponíveis.`;this.onStatus(message);throw new ProviderError(message,503)})();
+    this.chains.set(id,run);try{return await run}finally{this.chains.delete(id)}
+  }
+  private async synthesizeOne(text:string,character:CharacterId,provider:string):Promise<Buffer>{
+    const fish = provider === 'fish';
     const key = fish ? this.env.FISH_API_KEY : this.env.TTS_API_KEY || this.env.OPENAI_API_KEY;
     if (!key) throw new ProviderError('TTS externo não configurado. Selecione voz do navegador ou legendas.', 503);
     const voice = fish ? (this.env[`FISH_REFERENCE_ID_${character.toUpperCase()}`] || this.env.FISH_REFERENCE_ID || '') : this.env[`TTS_VOICE_${character.toUpperCase()}`] || this.env.TTS_VOICE || 'alloy';
     const model = fish ? (this.env.FISH_MODEL || 's2.1-pro') : this.env.TTS_MODEL || 'gpt-4o-mini-tts';
     const url = fish ? 'https://api.fish.audio/v1/tts' : endpoint(this.env.TTS_BASE_URL || this.env.OPENAI_BASE_URL, '/audio/speech');
-    const id = createHash('sha256').update(JSON.stringify({ text, voice, model, url })).digest('hex');
+    const speed=numeric(this.env,fish?'FISH_SPEED':'TTS_SPEED',1,fish?.5:.25,fish?2:4);
+    const id = createHash('sha256').update(JSON.stringify({ text, voice, model, url, speed })).digest('hex');
     const file = join(this.directory, `${id}.mp3`);
     await mkdir(this.directory, { recursive: true });
     try { return await readFile(file); } catch { /* Cache miss. */ }
@@ -101,7 +114,7 @@ export class AudioProvider {
     if (existing) return existing;
     const request = (async () => {
       let response: Response;
-      try { response = await this.fetchImpl(url, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${key}`, ...(fish ? { model } : {}) }, signal: this.shutdownSignal ? AbortSignal.any([this.shutdownSignal, AbortSignal.timeout(30_000)]) : AbortSignal.timeout(30_000), body: JSON.stringify(fish ? {text, format:'mp3', ...(voice ? {reference_id:voice} : {})} : { model, input: text, voice, response_format: 'mp3' }) }); }
+      try { response = await this.fetchImpl(url, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${key}`, ...(fish ? { model } : {}) }, signal: this.shutdownSignal ? AbortSignal.any([this.shutdownSignal, AbortSignal.timeout(numeric(this.env,'TTS_TIMEOUT_MS',10000,100,30000))]) : AbortSignal.timeout(numeric(this.env,'TTS_TIMEOUT_MS',10000,100,30000)), body: JSON.stringify(fish ? {text, format:'mp3', ...(speed!==1?{prosody:{speed}}:{}), ...(voice ? {reference_id:voice} : {})} : { model, input: text, voice, response_format: 'mp3', speed }) }); }
       catch { throw new ProviderError('O provedor de voz não respondeu. A fala permanece nas legendas.'); }
       if (!response.ok) throw new ProviderError(`O provedor de voz retornou HTTP ${response.status}.`);
       const contentType = response.headers.get('content-type') || '';
@@ -128,11 +141,11 @@ export class AudioProvider {
   }
   private async prune(): Promise<void> {
     const files = (await readdir(this.directory)).filter(x => /^[a-f0-9]{64}\.mp3$/.test(x));
-    const entries = await Promise.all(files.map(async name => ({ name, info: await stat(join(this.directory, name)) })));
+    const entries = await Promise.all(files.map(async name => ({ name, info: await stat(join(this.directory, name)).catch(()=>({size:0,mtimeMs:0})) })));
     let total = entries.reduce((n, e) => n + e.info.size, 0);
     for (const entry of entries.sort((a, b) => a.info.mtimeMs - b.info.mtimeMs)) {
       if (total <= this.maxBytes) break;
-      await unlink(join(this.directory, entry.name)); total -= entry.info.size;
+      await unlink(join(this.directory, entry.name)).catch(()=>undefined); total -= entry.info.size;
     }
   }
 }
