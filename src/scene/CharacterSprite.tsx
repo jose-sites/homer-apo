@@ -1,3 +1,4 @@
+import {RigCharacter} from './RigCharacter';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useFrame, useThree } from '@react-three/fiber';
 import { DoubleSide, Group, Mesh, MeshBasicMaterial, SRGBColorSpace, Texture, TextureLoader, Vector3 } from 'three';
@@ -48,6 +49,7 @@ export function CharacterSprite({character,position,height,speech,paused}: {char
   group.current.rotation.z=character.activity==='reacting'&&!paused?Math.sin(t*5)*.035:0;
  });
  if(!character.enabled)return null;
+ if(!asset)return <RigCharacter character={character} position={position} height={height} speech={speech} paused={paused}/>;
  return <group ref={group} position={position} userData={{spriteManifest:SPRITE_MANIFEST[character.id]}}>
   <mesh ref={mesh} position={[0,height/2,0]} renderOrder={2}>
    <planeGeometry args={[height*300/420,height]}/><meshBasicMaterial map={textures[0]} transparent alphaTest={.05} side={DoubleSide} depthWrite={true} toneMapped={false}/>

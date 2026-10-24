@@ -1,9 +1,10 @@
+import {RIG} from './characterMotion';
 import type {CharacterId} from '../../shared/types';
 export const SPRITE_ART_STATUS='Sprites vetoriais 2.5D • expressões e boca animadas';
 export interface SpriteAssetSet {front:string;left?:string;right?:string;profile?:string;back?:string}
 export const SPRITE_MANIFEST:Record<CharacterId,SpriteAssetSet>={homer:{front:'/sprites/homer.svg'},marge:{front:'/sprites/marge.svg'},bart:{front:'/sprites/bart.svg'},lisa:{front:'/sprites/lisa.svg'},maggie:{front:'/sprites/maggie.svg'}};
 /** All frames share a 300×420 registration. Expressions remain real runtime states. */
-export function spriteSvg(id:CharacterId,mouth=0,blink=false,expression='neutral'):string{
+export function spriteSvg(id:CharacterId,mouth=0,blink=false,expression='neutral',layer='full',seated=false):string{
  mouth=Math.max(0,Math.min(2,Math.floor(mouth)));expression=['neutral','happy','angry','confused','sleepy'].includes(expression)?expression:'neutral';
  const skin='url(#skin)',white='url(#shirt)',blue='url(#blue)',red='url(#red)';
  const defs=`<defs>
@@ -88,5 +89,21 @@ export function spriteSvg(id:CharacterId,mouth=0,blink=false,expression='neutral
  <ellipse cx="156" cy="218" rx="${mouth?20:17}" ry="${mouth===2?12:9}" fill="#ee7844"/><ellipse cx="156" cy="223" rx="${mouth===2?8:6}" ry="8" fill="none" stroke="#fbd959" stroke-width="4"/>
  <path d="M106 335q20 3 40 40m38-38q-16 9-22 32" fill="none" stroke="#3b8ab7"/>
  `;
- return `<svg xmlns="http://www.w3.org/2000/svg" width="600" height="840" viewBox="0 0 300 420" data-character="${id}" data-expression="${expression}" data-mouth="${mouth}" data-blink="${blink}">${defs}<g stroke="#674b20" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${shadow}${body}</g></svg>`;
+
+ if(layer!=='full'){
+  const starts={homer:'M76 192',marge:'M118 229',bart:'M106 208',lisa:'M117 216',maggie:'M115 250'};
+  const heads={homer:'M109 164',marge:'M132 204',bart:'M111 201',lisa:star(151,149,79,58),maggie:star(150,165,79,57)};
+  const armStart=body.indexOf(`<path d="${starts[id]}`),armEnd=body.indexOf('\n <path',armStart);
+  const headStart=body.indexOf(`<path d="${heads[id]}`);
+  const rig=RIG[id];const [left,right,y]=rig.shoulders;
+  if(layer==='head')body=body.slice(headStart);
+  else if(layer==='body'){
+   const legs=id==='maggie'?body.slice(0,armStart):seated?`<g transform="translate(0 ${id==='homer'?-35:id==='bart'?-43:id==='marge'?25:0})"><path d="M110 320Q95 333 107 350L124 370 141 365 129 339H171l-2 29 20 3 11-34q0-13-18-17Z" fill="${id==='homer'||id==='bart'?blue:skin}"/><path d="M121 363q-16 6-15 17h39v-14M168 365v15h35q3-12-18-16" fill="${id==='homer'?'url(#shoe)':red}"/></g>`:body.slice(0,armStart);
+   body=legs+body.slice(armEnd,headStart);
+  }else{
+   const rightSide=layer.startsWith('right');const x=rightSide?right:left;const mirror=rightSide?-1:1;const elbowX=x+(rightSide?8:-8);const sleeve=id==='homer'?white:id==='bart'?red:skin;
+   body=layer.endsWith('Upper')?`<path d="M${x-8} ${y}Q${x-12} ${rig.elbow-4} ${elbowX-7} ${rig.elbow+4}Q${elbowX} ${rig.elbow+12} ${elbowX+7} ${rig.elbow+4}L${x+8} ${y}Z" fill="${skin}"/><ellipse cx="${x}" cy="${y}" rx="10" ry="12" fill="${sleeve}" stroke="none"/>`:`<path d="M${elbowX-7} ${rig.elbow}L${elbowX-7} ${rig.hand}Q${elbowX} ${rig.hand+8} ${elbowX+7} ${rig.hand}L${elbowX+7} ${rig.elbow}Z" fill="${skin}"/><ellipse cx="${elbowX}" cy="${rig.elbow}" rx="6.7" ry="7" fill="${skin}" stroke="none"/>${layer.endsWith('Point')?`<g transform="translate(${elbowX} ${rig.hand-5}) scale(${mirror} 1)"><path d="M-6 0q-5 8-3 18l3 8 6-2 1-13 3 27q3 6 6 0l-1-31q9 5 10-2L8 0Z" fill="${skin}"/></g>`:hand(elbowX,rig.hand-5,mirror)}`;
+  }
+ }
+ return `<svg xmlns="http://www.w3.org/2000/svg" width="600" height="840" viewBox="0 0 300 420" data-character="${id}" data-expression="${expression}" data-mouth="${mouth}" data-blink="${blink}">${defs}<g stroke="#674b20" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${layer==='full'?shadow:''}${body}</g></svg>`;
 }

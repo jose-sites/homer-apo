@@ -45,7 +45,7 @@ let seq=0;
 const uid=(prefix:string,now:number)=>`${prefix}-${now}-${++seq}`;
 const clone=<T>(v:T):T=>structuredClone(v);
 const clamp=(n:number)=>Math.max(0,Math.min(100,n));
-interface Runtime {lastCamera:number;lastDecision:number;lastResponse:number;lastEventCheck:number;lastSummary:number;recentLines:string[];activeEvents:Map<string,number>;lastChat:Map<string,number>;responses:Set<string>;eventSpeaker?:CharacterId;gameResult?:string;pausedAt?:number}
+interface Runtime {lastCamera:number;lastDecision:number;lastResponse:number;lastEventCheck:number;lastSummary:number;recentLines:string[];activeEvents:Map<string,number>;lastChat:Map<string,number>;responses:Set<string>;eventSpeaker?:CharacterId;gameResult?:string;pausedAt?:number;speechActivity?:{character:CharacterId;activity:LiveState['characters'][CharacterId]['activity']}}
 const runtimes=new WeakMap<LiveState,Runtime>();
 function runtime(state:LiveState,now:number):Runtime{
  let rt=runtimes.get(state);if(!rt){rt={lastCamera:now,lastDecision:now,lastResponse:0,lastEventCheck:now,lastSummary:now,recentLines:[],activeEvents:new Map(),lastChat:new Map(),responses:new Set(),pausedAt:state.paused?now:undefined};runtimes.set(state,rt);}return rt;
@@ -319,10 +319,10 @@ export function tick(state:LiveState,now=Date.now(),dtMs=1000):void{
   state.room=state.movement.to;state.characters.homer.room=state.room;state.characters.homer.activity='idle';state.movement=null;
   state.cameraId=state.cameras.find(c=>c.room===state.room&&c.type==='wide')?.id??state.cameraId;rt.lastCamera=now;logEvent(state,'movement',`Homer chegou: ${ROOMS.find(r=>r.id===state.room)!.name}`,now);
  }
- if(state.speaking&&now>=state.speaking.createdAt+state.speaking.duration){const who=state.speaking.character;if(state.characters[who].activity==='talking')state.characters[who].activity=who==='homer'&&state.room!=='living'?'idle':'sitting';state.speaking=null;}
+ if(state.speaking&&now>=state.speaking.createdAt+state.speaking.duration){const who=state.speaking.character;if(state.characters[who].activity==='talking')state.characters[who].activity=rt.speechActivity?.character===who?rt.speechActivity.activity:who==='homer'&&state.room!=='living'?'idle':'sitting';state.speaking=null;}
  if(!state.speaking&&state.speechQueue.length){
-  const speech=state.speechQueue.shift()!;if(state.characters[speech.character].enabled){speech.createdAt=now;state.speaking=speech;if(!state.movement||speech.character!=='homer')state.characters[speech.character].activity='talking';
-   if(state.settings.autoCamera&&state.settings.mode!=='manual'&&!state.movement&&now-rt.lastCamera>8000){const room=state.characters[speech.character].room;state.cameraId=state.cameras.find(c=>c.room===room&&c.type===(speech.character==='homer'?'reaction':'frontal'))?.id??state.cameraId;rt.lastCamera=now;}
+  const speech=state.speechQueue.shift()!;if(state.characters[speech.character].enabled){speech.createdAt=now;rt.speechActivity={character:speech.character,activity:state.characters[speech.character].activity};state.speaking=speech;if(!state.movement||speech.character!=='homer')state.characters[speech.character].activity='talking';
+   if(state.settings.autoCamera&&state.settings.mode!=='manual'&&!state.movement&&now-rt.lastCamera>8000){const room=state.characters[speech.character].room;const current=state.cameras.find(c=>c.id===state.cameraId);if(current?.room!==room||!['wide','frontal'].includes(current.type))state.cameraId=state.cameras.find(c=>c.room===room&&c.type==='frontal')?.id??state.cameraId;rt.lastCamera=now;}
   }
  }
  for(const [eventId,end]of rt.activeEvents){if(now>=end){rt.activeEvents.delete(eventId);if(eventId==='rain')state.weather='clear';if(eventId==='power'||eventId==='lights')state.power=true;if(eventId==='fridge')state.doors.fridge=false;if(eventId==='sleep'){state.characters.homer.activity='sitting';state.characters.homer.expression='neutral';}}}
