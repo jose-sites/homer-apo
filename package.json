@@ -12,7 +12,9 @@
     "start": "tsx server/index.ts",
     "test": "tsx --test tests/*.test.ts",
     "typecheck": "tsc --noEmit",
-    "test:browser": "tsx tests/browser.smoke.ts"
+    "test:browser": "tsx tests/browser.smoke.ts",
+    "build:pages": "tsc --noEmit && vite build --mode pages",
+    "test:pages": "tsx scripts/test-pages.ts"
   },
   "dependencies": {
     "@react-three/drei": "^10.7.6",

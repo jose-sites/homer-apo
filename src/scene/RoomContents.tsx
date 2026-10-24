@@ -1,3 +1,4 @@
+import {CHARACTER_LAYOUT} from './characterLayout';
 import {ReferenceLiving,ReferenceKitchen} from './ReferenceRooms';
 import {STAIR_OFFSET} from '../../shared/referenceLayout';
 import type {Action, LiveState, Room} from '../../shared/types';
@@ -35,10 +36,9 @@ export function RoomContents({room,state,onAction}:{room:Room;state:LiveState;on
   {room.kind==='exterior'&&<Front/>}
   {(Object.values(state.characters)).map(character=>{
    if(character.id==='homer'&&state.movement)return null;if(character.room!==room.id)return null;
-   const positions={homer:[-2,.08,-1.9],marge:[-.95,.08,-2],bart:[.05,.08,-1.87],lisa:[.85,.08,-1.85],maggie:[1.55,.45,-2]} as const;
-   const heights={homer:2.3,marge:2.72,bart:1.72,lisa:1.6,maggie:1.03};
-   const p=room.kind==='living'?[...positions[character.id]]:[-1,0,-.7];
-   return <CharacterSprite key={character.id} character={character} position={p as [number,number,number]} height={heights[character.id]} speech={state.speaking} paused={state.paused}/>;
+   const layout=CHARACTER_LAYOUT[character.id];
+   const p=room.kind==='living'?layout.position:[-1,0,-.7];
+   return <CharacterSprite key={character.id} character={character} position={p as [number,number,number]} height={layout.height} speech={state.speaking} paused={state.paused}/>;
   })}
  </group>
 }

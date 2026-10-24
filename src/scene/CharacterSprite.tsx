@@ -23,7 +23,7 @@ export function CharacterSprite({character,position,height,speech,paused}: {char
   if(!asset)return;let alive=true;const loaded:Texture[]=[];const loader=new TextureLoader();
   const variants=(['front','left','right','profile','back'] as SpriteAngle[]).filter(angle=>asset[angle]);
   for(const angle of variants){const paths=spriteFramePaths(asset,angle);const unique=[...new Set(paths)];
-   void Promise.all(unique.map(async path=>{const texture=await loader.loadAsync(path);texture.colorSpace=SRGBColorSpace;if(!alive){texture.dispose();return [path,texture] as const;}loaded.push(texture);return [path,texture] as const;})).then(entries=>{if(alive){const lookup=new Map(entries);replacements.current[angle]=paths.map(path=>lookup.get(path)!);}}).catch(()=>{window.dispatchEvent(new CustomEvent('homer:sprite-error',{detail:{character:character.id,angle,message:'Arte indisponível; mantendo sprite vetorial provisório.'}}));});
+   void Promise.all(unique.map(async path=>{const texture=await loader.loadAsync(`${import.meta.env.BASE_URL}${path.replace(/^\//,'')}`);texture.colorSpace=SRGBColorSpace;if(!alive){texture.dispose();return [path,texture] as const;}loaded.push(texture);return [path,texture] as const;})).then(entries=>{if(alive){const lookup=new Map(entries);replacements.current[angle]=paths.map(path=>lookup.get(path)!);}}).catch(()=>{window.dispatchEvent(new CustomEvent('homer:sprite-error',{detail:{character:character.id,angle,message:'Arte indisponível; mantendo sprite vetorial provisório.'}}));});
   }
   return()=>{alive=false;replacements.current={};loaded.forEach(t=>t.dispose());};
  },[asset,character.id]);

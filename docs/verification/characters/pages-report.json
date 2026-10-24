@@ -1,0 +1,14 @@
+{
+  "errors": [],
+  "requests": [
+    "http://127.0.0.1:33941/homer-apo/",
+    "http://127.0.0.1:33941/homer-apo/assets/index-BrWeOT66.js",
+    "http://127.0.0.1:33941/homer-apo/assets/index-BH6vMxQf.css",
+    "http://127.0.0.1:33941/homer-apo/assets/PagesPreview-BlEaTuRc.js",
+    "http://127.0.0.1:33941/homer-apo/favicon.svg",
+    "http://127.0.0.1:33941/homer-apo/assets/HouseScene-CfFmbFuv.js",
+    "http://127.0.0.1:33941/homer-apo/fonts/dm-sans-0.woff2",
+    "http://127.0.0.1:33941/homer-apo/sprites/manifest.json"
+  ],
+  "at": "2026-10-24T16:06:13.181Z"
+}

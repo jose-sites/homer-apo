@@ -29,4 +29,4 @@ export function spriteFramePaths(asset:ExternalSprite,angle:SpriteAngle):string[
  return [frames.closed,frames.half||frames.closed,frames.open||frames.half||frames.closed,frames.blink||frames.closed,frames.blink||frames.half||frames.closed,frames.blink||frames.open||frames.closed];
 }
 let manifestPromise:Promise<SpriteOverrides>|null=null;
-export function loadSpriteOverrides():Promise<SpriteOverrides>{return manifestPromise??=fetch('/sprites/manifest.json').then(r=>r.ok?r.json():{}).then(parseSpriteManifest).catch(()=>({}));}
+export function loadSpriteOverrides():Promise<SpriteOverrides>{return manifestPromise??=fetch(`${import.meta.env.BASE_URL}sprites/manifest.json`).then(r=>r.ok?r.json():{}).then(parseSpriteManifest).catch(()=>({}));}

@@ -15,3 +15,9 @@ test('Speech restores previous activity and keeps an already safe family framing
  const now=1800000000000,s=createInitialState(now);s.settings.mode='auto';s.settings.aiEnabled=false;s.settings.eventsEnabled=false;s.settings.familyEnabled=false;s.cameraId='living-family';s.characters.homer.activity='sleeping';
  applyAction(s,{type:'TALK',character:'homer',text:'Olá pessoal'},now);tick(s,now+10,10);assert.equal(s.characters.homer.activity,'talking');assert.equal(s.cameraId,'living-family');const end=s.speaking!.createdAt+s.speaking!.duration+1;tick(s,end,10);assert.equal(s.characters.homer.activity,'sleeping');
 });
+
+test('Articulated limbs have no visible circular joint overlays and babies have a distinct seated pose',()=>{
+ for(const id of Object.keys(RIG) as (keyof typeof RIG)[])for(const layer of ['leftUpper','rightUpper','leftLower','rightLower'])assert.ok(!spriteSvg(id,0,false,'neutral',layer).includes('<ellipse'));
+ assert.match(spriteSvg('maggie',0,false,'neutral','body',true),/M112 298/);
+ assert.match(spriteSvg('marge',0,false,'neutral','body',true),/M120 296/);
+});

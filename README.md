@@ -145,3 +145,5 @@ git archive --format=zip --output=../homer-ai-live-source.zip HEAD
 ```
 
 Para preservar dados de execução locais, pare o servidor e faça também uma cópia privada de `data/` e `.env`. Eles não fazem parte do ZIP de fontes nem do bundle. Baixe uma cópia ou envie commits ao GitHub; arquivos no executor podem ficar indisponíveis quando o ambiente for substituído.
+
+Revisão de personagens: [animação e evidências](docs/CHARACTER-ANIMATION.md). Publicação estática: [GitHub Pages e limitações de hospedagem](docs/PUBLISHING.md).

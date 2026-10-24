@@ -1,0 +1,53 @@
+{
+  "pageErrors": [],
+  "quality": "low (software renderer recording)",
+  "scenes": [
+    {
+      "character": "homer",
+      "gesture": "Apontar",
+      "duration": 3200
+    },
+    {
+      "character": "homer",
+      "gesture": "Dúvida",
+      "duration": 3500
+    },
+    {
+      "character": "homer",
+      "gesture": "Comemorar",
+      "duration": 3500
+    },
+    {
+      "character": "homer",
+      "gesture": "Concordar",
+      "duration": 3500
+    },
+    {
+      "character": "homer",
+      "gesture": "Surpresa",
+      "duration": 3500
+    },
+    {
+      "character": "homer",
+      "gesture": "Irritação",
+      "duration": 3500
+    },
+    {
+      "character": "homer",
+      "gesture": "Fala longa · variação e pausas",
+      "duration": 11500
+    },
+    {
+      "character": "marge",
+      "gesture": "Família sentada",
+      "duration": 3000
+    },
+    {
+      "character": "maggie",
+      "gesture": "Maggie · chupeta",
+      "duration": 2800
+    }
+  ],
+  "audio": "Web Audio synthetic oscillator, RMS → actual animation event bridge. Playwright video has no audio track.",
+  "at": "2026-10-24T16:10:57.110Z"
+}
