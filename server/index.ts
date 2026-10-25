@@ -209,7 +209,7 @@ export function createServer(options: ServerOptions = {}) {
     if (closed || automatic && state.settings.mode === 'manual') throw new ProviderError('Resposta automática cancelada pelo operador.', 409);
     if (state.paused) throw new ProviderError('Retome a operação antes de solicitar uma fala.', 409);
     if (!state.settings.aiEnabled) throw new ProviderError('Ative a IA no painel antes de solicitar uma resposta.', 409);
-    const message = messageId ? state.chat.find(m => m.id === messageId) : [...state.chat].reverse().find(m => m.selected);
+    const message = messageId ? state.chat.find(m => m.id === messageId) : [...state.chat].reverse().find(m=>m.selected);
     if (messageId && !message) throw new ProviderError('Mensagem não encontrada.', 404);
     if (Date.now() - lastAIAt < state.settings.responseCooldown * 1000) throw new ProviderError('Aguarde o intervalo configurado entre respostas.', 429);
     aiBusy = true;
@@ -228,8 +228,8 @@ export function createServer(options: ServerOptions = {}) {
       }
       if (state.paused || !state.settings.aiEnabled) throw new ProviderError('Resposta descartada: operação pausada ou IA desativada durante a requisição.', 409);
       for (const action of actions) {
-        if (state.settings.mode === 'semi') state.proposals.push({ id: randomUUID(), action: action as LiveState['proposals'][number]['action'], reason: 'Sugestão da IA; aguarda aprovação do operador.' });
-        else { const result = applyAction(state, action, Date.now()); if (!result.ok) throw new ProviderError(result.error || 'Ação indisponível.'); }
+        if (state.settings.mode === 'semi') state.proposals.push({ id: randomUUID(), action: action as LiveState['proposals'][number]['action'], reason: 'Sugestão da IA; aguarda aprovação do operador.',replyTo:message?{...message}:undefined });
+        else { const previousIds=new Set(state.speechQueue.map(s=>s.id));const result = applyAction(state, action, Date.now()); if (!result.ok) throw new ProviderError(result.error || 'Ação indisponível.');if(message)for(const speech of state.speechQueue)if(speech.character==='homer'&&!previousIds.has(speech.id))speech.replyTo={...message}; }
       }
       state.proposals = state.proposals.slice(-20);
       const spoken = actions.filter((a:any)=>a.type==='TALK').map((a:any)=>String(a.text).slice(0,350));

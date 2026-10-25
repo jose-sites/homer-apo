@@ -1,10 +1,8 @@
-import {CHARACTER_LAYOUT} from './characterLayout';
 import {ReferenceLiving,ReferenceKitchen} from './ReferenceRooms';
 import {STAIR_OFFSET} from '../../shared/referenceLayout';
 import type {Action, LiveState, Room} from '../../shared/types';
 import {Box,Ball,Cylinder,Rounded,Plant,Lamp,Table,Chair,Bookcase,Bed,Rug,Sofa,Donut,Mug,Picture,Window} from './Furniture';
 import { Television } from './Television';
-import { CharacterSprite } from './CharacterSprite';
 import {RoomDetails} from './RoomDetails';
 import { Detailed } from '@react-three/drei';
 
@@ -34,12 +32,7 @@ export function RoomContents({room,state,onAction}:{room:Room;state:LiveState;on
   {room.kind==='attic'&&<><Box p={[-2,1,-1]} s={[2,1.8,.8]} c="#986b48"/>{[-3,0,2.5].map((x,i)=><Box key={x} p={[x,.45,1.5]} s={[1.3,.9,1]} c={i%2?'#9f855f':'#b1986c'}/>)}<Picture p={[0,2,-3.8]} kind="family"/><Cylinder p={[3.7,1.1,-2.6]} r={.07} h={2.2} c="#70583f"/><Box p={[3.7,1.85,-2.6]} s={[1,.08,.1]} c="#70583f"/></>}
   {room.kind==='yard'&&<Yard/>}
   {room.kind==='exterior'&&<Front/>}
-  {(Object.values(state.characters)).map(character=>{
-   if(character.id==='homer'&&state.movement)return null;if(character.room!==room.id)return null;
-   const layout=CHARACTER_LAYOUT[character.id];
-   const p=room.kind==='living'?layout.position:[-1,0,-.7];
-   return <CharacterSprite key={character.id} character={character} position={p as [number,number,number]} height={layout.height} speech={state.speaking} paused={state.paused}/>;
-  })}
+
  </group>
 }
 export function Stairs({level=0}:{level?:number}){return <group position={STAIR_OFFSET}>{Array.from({length:18},(_,i)=><Box key={i} p={[0,(i+1)*.1,-(-1.5+(i+.5)*4/18)]} s={[2.3,(i+1)*.2,4/18+.015]} c={i%2?'#a46b44':'#b77c50'}/>)}{[-1.25,1.25].map(x=><group key={x}>{Array.from({length:9},(_,i)=><Cylinder key={i} p={[x,.95+i*.4,1.5-i*.5]} r={.035} h={1.2} c={level<0?'#98592d':'#873e9b'}/>)}<Cylinder p={[x,2.75,-.5]} r={.065} h={5.38} c={level<0?'#7d4727':'#693183'} rotation={[-.838,0,0]}/></group>)}<Box p={[0,-.04,2]} s={[2.5,.08,1]} c="#bb9471"/></group>}

@@ -6,6 +6,7 @@ import type { Action, LiveState, Vec3 } from '../../shared/types';
 import { ROOMS, CAMERAS } from '../../shared/data';
 import { RoomShell, Facade } from './RoomShell';
 import { RoomContents, Stairs } from './RoomContents';
+import {Homer3D} from './Homer3D';
 import { currentTravelRoom } from './sceneLayout';
 
 export interface SceneMetrics {fps:number;drawCalls:number;triangles:number;memory:number|null}
@@ -42,6 +43,7 @@ function World({state,onAction,onMetrics,explore,onCameraPose,onFade}:Props&{onF
   <hemisphereLight args={['#d6f0ff','#9c637d',state.power?.85:.2]}/>
   <directionalLight position={[7,14,9]} intensity={night?.25:2.1} color={night?'#a2c0e1':'#fff0d5'} castShadow={state.settings.quality!=='low'} shadow-mapSize={state.settings.quality==='high'?[1024,1024]:[512,512]} shadow-camera-left={-18} shadow-camera-right={18} shadow-camera-top={18} shadow-camera-bottom={-18} shadow-camera-far={45} shadow-bias={-.001}/>
   {visible.map(r=><group key={r.id}><RoomShell room={r} state={state} onAction={onAction} activeRoom={detailedRoom} visibleRoomIds={visible.map(v=>v.id)}/>{(r.id===detailedRoom||(['living','kitchen'].includes(detailedRoom)&&['living','kitchen'].includes(r.id)))?<RoomContents room={r} state={state} onAction={onAction}/>:['hall','basement'].includes(r.kind)&&<group position={r.origin}><Stairs level={r.floor}/></group>}</group>)}
+  <Homer3D state={state}/>
   <SceneUpdates state={state} fallbackRoom={room.id} onTravelRoom={setTravelRoom}/>
   {exterior&&<Facade night={night}/>}
   {state.weather==='rain'&&<Rain origin={room.origin} paused={state.paused}/>}

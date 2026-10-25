@@ -17,7 +17,7 @@ export function ReferenceLiving({state,onAction}:{state:LiveState;onAction:(a:Ac
   <UpholsteredSofa/><LivingDetails/><StairFinish/><RoomDaylight on={!night&&state.power} shadows={state.settings.quality!=='low'}/>
   <TextileRug/>
   <CraftedTable p={[-.4,0,-.05]}/><ContactShade p={[-.4,.01,-.05]} size={[3.6,2.1]}/>
-  <Cylinder p={[.3,.73,-.1]} r={.27} h={.03} c="#f9c2cd"/><Donut p={[.3,.81,-.1]} scale={.8}/><Mug p={[-1.1,.7,-.2]} color="#e9c434"/>
+  <Cylinder p={[.3,.73,-.1]} r={.27} h={.03} c="#f9c2cd"/>{(!state.interaction||Date.now()-state.interaction.startedAt<4700)&&<group onClick={()=>onAction({type:'INTERACT_WITH_OBJECT',object:'donut'})}><Donut p={[.3,.81,-.1]} scale={.8}/></group>}<Mug p={[-1.1,.7,-.2]} color="#e9c434"/>
   <Box p={[-.1,.73,.25]} s={[.42,.025,.24]} c="#e785a3"/>
   <Picture p={[-.45,2.58,-3.87]} size={[1.75,1.2]}/><Picture p={[-1.95,2.5,-3.87]} size={[.4,.6]} kind="family"/><Picture p={[1.05,2.5,-3.87]} size={[.4,.6]} kind="family"/>
   <Sideboard p={[-3.15,0,-2.9]}/><group position={[-3.15,.98,-2.9]}><DetailedLamp on={state.power}/></group>

@@ -27,7 +27,7 @@ export class StateDatabase {
     // never replayed on a server restart.
     const keepDays = Math.min(90, Math.max(1, Number(state.settings.retentionDays) || 7));
     const cutoff = now - keepDays * 86_400_000;
-    const snapshot = { ...state, chat: [], speaking: null, speechQueue: [], proposals: [],
+    const snapshot = { ...state, chat: [], speaking: null, speechQueue: [], proposals: [], interaction: undefined,
       memory: state.memory.filter(text => !text.startsWith('Chat comentou:')).slice(-30),
       logs: state.logs.filter(event => event.at >= cutoff).slice(0, 200) };
     this.db.exec('BEGIN IMMEDIATE');

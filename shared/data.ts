@@ -40,7 +40,7 @@ CAMERAS.push(
  {id:'yard-panorama',name:'Quintal · panorâmica',room:'yard',position:[7,3,-13],target:[0,1,-17],fov:62,type:'environment',transition:'fade'},
 );
 
-for(const c of CAMERAS){if(['living-wide','living-front','living-family'].includes(c.id)){c.position=[-1.4,2,3.75];c.target=[0,1.6,-2.7];c.fov=64;}if(['kitchen-wide','kitchen-front'].includes(c.id)){c.position=[-13.6,2.1,3.6];c.target=[-9.9,1.45,-2.4];c.fov=66;}}
+for(const c of CAMERAS){if(['living-wide','living-front','living-family'].includes(c.id)){c.position=[0,2,3.75];c.target=[0,.65,-2.7];c.fov=70;}if(['kitchen-wide','kitchen-front'].includes(c.id)){c.position=[-13.6,2.1,3.6];c.target=[-9.9,1.45,-2.4];c.fov=66;}}
 
 for(const c of CAMERAS){if(['hall','upstairs','basement','attic'].some(id=>c.id===id+'-wide')){const r=ROOMS.find(r=>r.id===c.room)!;c.position=[r.origin[0]-3.6,r.origin[1]+2.4,r.origin[2]+3.4];c.target=[r.origin[0]+1,r.origin[1]+1.35,r.origin[2]-.4];c.fov=60;}}
 
