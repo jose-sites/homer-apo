@@ -1,4 +1,4 @@
-import {DONUT_DURATION} from './homerMotion';
+import {DONUT_DURATION,donutPose} from './homerMotion';
 import {LAYOUT_REVISION,STAIR_BOTTOM,STAIR_TOP} from './referenceLayout';
 import { z } from 'zod';
 import { CAMERAS, DOORWAYS, EVENTS, LINES, MAGGIE_EFFECTS, ROOMS, ROOM_NAV_POINTS, doorId } from './data';
@@ -201,6 +201,7 @@ export function applyAction(state:LiveState,value:unknown,now=Date.now()):{ok:bo
  const valid=validateAction(value);if(!valid.ok)return valid;
  const action=valid.action;
  if(state.paused&&!PAUSED_ALLOWED.has(action.type))return {ok:false,error:'A operação está pausada. Retome para executar esta ação.'};
+ if(state.interaction&&(['CHANGE_CAMERA','MOVE_TO_ROOM','PLAY_ANIMATION','REACT','INTERACT_WITH_OBJECT','TRIGGER_EVENT'].includes(action.type)||(action.type==='CHARACTER'&&action.character==='homer')))return {ok:false,error:'Aguarde Homer voltar da cozinha.'};
  const rt=runtime(state,now);
  let result:{ok:boolean;error?:string}={ok:true};
  switch(action.type){
@@ -212,7 +213,7 @@ export function applyAction(state:LiveState,value:unknown,now=Date.now()):{ok:bo
   case 'STOP_GAME':if(!state.game)return {ok:false,error:'Nenhum jogo em andamento.'};finishGame(state.game);state.game.status='ended';state.game.result='Encerrado pelo operador.';break;
   case 'PLAY_ANIMATION':if(action.activity==='walking')return {ok:false,error:'Use MOVE_TO_ROOM para caminhar em uma rota válida.'};if(state.movement&&action.character==='homer')return {ok:false,error:'Aguarde o deslocamento terminar.'};state.characters[action.character].activity=action.activity;break;
   case 'INTERACT_WITH_OBJECT':{
-   if(action.object==='donut'){if(state.room!=='living'||state.movement||state.interaction)return {ok:false,error:'Homer precisa estar livre na sala.'};state.interaction={id:uid('donut',now),kind:'donut',startedAt:now,duration:DONUT_DURATION};}
+   if(action.object==='donut'){if(state.room!=='living'||state.movement||state.interaction)return {ok:false,error:'Homer precisa estar livre na sala.'};state.interaction={id:uid('donut',now),kind:'donut',startedAt:now,duration:DONUT_DURATION};state.doors['kitchen-living']=true;}
    else if(action.object==='fridge'){if(state.room!=='kitchen')return {ok:false,error:'A geladeira fica na cozinha.'};state.doors.fridge=!state.doors.fridge;state.homer.hunger=clamp(state.homer.hunger-20);}
    else if(action.object==='tv'){if(state.room!=='living')return {ok:false,error:'A televisão fica na sala.'};state.tvChannel=(state.tvChannel+1)%5;}
    else if(action.object==='lights')state.power=!state.power;
@@ -322,11 +323,12 @@ export function tick(state:LiveState,now=Date.now(),dtMs=1000):void{
   state.room=state.movement.to;state.characters.homer.room=state.room;state.characters.homer.activity='idle';state.movement=null;
   state.cameraId=state.cameras.find(c=>c.room===state.room&&c.type==='wide')?.id??state.cameraId;rt.lastCamera=now;logEvent(state,'movement',`Homer chegou: ${ROOMS.find(r=>r.id===state.room)!.name}`,now);
  }
- if(state.interaction&&now>=state.interaction.startedAt+state.interaction.duration){state.interaction=undefined;state.homer.hunger=clamp(state.homer.hunger-15);logEvent(state,'object','Homer pegou a rosquinha e voltou ao seu lugar.',now);}
+ if(state.interaction){state.room=donutPose(now-state.interaction.startedAt).room;state.characters.homer.room=state.room;}
+ if(state.interaction&&now>=state.interaction.startedAt+state.interaction.duration){state.interaction=undefined;state.room='living';state.characters.homer.room='living';rt.lastCamera=now;state.homer.hunger=clamp(state.homer.hunger-15);logEvent(state,'object','Homer pegou a rosquinha e voltou ao seu lugar.',now);}
  if(state.speaking&&now>=state.speaking.createdAt+state.speaking.duration){const who=state.speaking.character;if(state.characters[who].activity==='talking')state.characters[who].activity=rt.speechActivity?.character===who?rt.speechActivity.activity:who==='homer'&&state.room!=='living'?'idle':'sitting';state.speaking=null;}
  if(!state.speaking&&state.speechQueue.length){
   const speech=state.speechQueue.shift()!;if(state.characters[speech.character].enabled){speech.createdAt=now;rt.speechActivity={character:speech.character,activity:state.characters[speech.character].activity};state.speaking=speech;if(!state.movement||speech.character!=='homer')state.characters[speech.character].activity='talking';
-   if(state.settings.autoCamera&&state.settings.mode!=='manual'&&!state.movement&&now-rt.lastCamera>8000){const room=state.characters[speech.character].room;const current=state.cameras.find(c=>c.id===state.cameraId);if(current?.room!==room||!['wide','frontal'].includes(current.type))state.cameraId=state.cameras.find(c=>c.room===room&&c.type==='frontal')?.id??state.cameraId;rt.lastCamera=now;}
+   if(!state.interaction&&state.settings.autoCamera&&state.settings.mode!=='manual'&&!state.movement&&now-rt.lastCamera>8000){const room=state.characters[speech.character].room;const current=state.cameras.find(c=>c.id===state.cameraId);if(current?.room!==room||!['wide','frontal'].includes(current.type))state.cameraId=state.cameras.find(c=>c.room===room&&c.type==='frontal')?.id??state.cameraId;rt.lastCamera=now;}
   }
  }
  for(const [eventId,end]of rt.activeEvents){if(now>=end){rt.activeEvents.delete(eventId);if(eventId==='rain')state.weather='clear';if(eventId==='power'||eventId==='lights')state.power=true;if(eventId==='fridge')state.doors.fridge=false;if(eventId==='sleep'){state.characters.homer.activity='sitting';state.characters.homer.expression='neutral';}}}
@@ -339,11 +341,11 @@ export function tick(state:LiveState,now=Date.now(),dtMs=1000):void{
    else if(state.settings.mode==='semi'){state.proposals.push({id:uid('proposal',now),action,reason:'Atividade escolhida pela votação do público.'});state.proposals=state.proposals.slice(-8);}
   }
  }}
- if(state.settings.mode!=='manual'){
+ if(state.settings.mode!=='manual'&&!state.interaction){
   if(state.settings.familyEnabled&&now>=state.nextFamilyAt&&!state.speaking&&!state.movement&&state.speechQueue.length<2)familyInteraction(state,now);
   if(state.settings.eventsEnabled&&now-rt.lastEventCheck>=30000){rt.lastEventCheck=now;const possible=state.events.filter(e=>!eventPossible(state,e,now));for(const event of possible.sort(()=>Math.random()-.5)){if(Math.random()<event.probability){triggerEvent(state,event,now);break;}}}
   if(state.settings.aiEnabled){if(state.settings.provider==='demo')localResponse(state,now);autonomousDecision(state,now);}
-  if(state.settings.autoCamera&&!state.movement&&!state.speaking&&now-rt.lastCamera>=state.settings.cameraInterval*1000){const candidates=state.cameras.filter(c=>c.room===state.room&&c.id!==state.cameraId&&c.type!=='first-person');if(candidates.length)state.cameraId=candidates[Math.floor(Math.random()*candidates.length)].id;rt.lastCamera=now;}
+  if(!state.interaction&&state.settings.autoCamera&&!state.movement&&!state.speaking&&now-rt.lastCamera>=state.settings.cameraInterval*1000){const candidates=state.cameras.filter(c=>c.room===state.room&&c.id!==state.cameraId&&c.type!=='first-person');if(candidates.length)state.cameraId=candidates[Math.floor(Math.random()*candidates.length)].id;rt.lastCamera=now;}
  }
  if(now-rt.lastSummary>=300000){rt.lastSummary=now;const summary=`${new Date(now).toLocaleTimeString('pt-BR')}: ${ROOMS.find(r=>r.id===state.room)!.name}; humor ${Math.round(state.homer.mood)}; ${state.logs.slice(0,3).map(l=>l.message).join(' / ')}`;state.memory.push(summary);state.memory=state.memory.slice(-30);}
  state.version++;

@@ -5,7 +5,7 @@ import {Group,Bone,Quaternion,Vector3,MathUtils} from 'three';
 import {createHomerRig,reachWithArm,rotateBoneInWorld} from './homerRig';
 import type {LiveState,Speech,Vec3} from '../../shared/types';
 import {ROOM_NAV_POINTS} from '../../shared/data';
-import {HOMER_HOME,DONUT_SPOT,DONUT_BITE_TARGET,donutPose,donutGesture,pointAlong} from '../../shared/homerMotion';
+import {HOMER_HOME,DONUT_TIMES,DONUT_SPOT,DONUT_BITE_TARGET,donutPose,donutGesture,pointAlong} from '../../shared/homerMotion';
 import {Donut} from './Furniture';
 
 /** A skinned mesh, not a billboard. Facial shape keys are deliberately absent. */
@@ -25,8 +25,9 @@ export function Homer3D({state}:{state:LiveState}){
   else if(previousMove.current&&path.current.length)position.current.set(...path.current.at(-1)!);
   previousMove.current=!!state.movement;root.current.position.copy(position.current);
   const facingCamera=Math.atan2(camera.position.x-position.current.x,camera.position.z-position.current.z);
-  const eatingYaw=Math.PI+Math.atan2(Math.sin(facingCamera-Math.PI),Math.cos(facingCamera-Math.PI))*gesture.faceCamera;
-  const yaw=walking?Math.atan2(direction[0],direction[2]):donut&&donut.phase!=='done'?eatingYaw:facingCamera;
+  const eatingYaw=-Math.PI/2+Math.atan2(Math.sin(facingCamera+Math.PI/2),Math.cos(facingCamera+Math.PI/2))*gesture.faceCamera;
+  root.current.visible=state.characters.homer.enabled&&!(donut&&elapsed<8000);
+  const yaw=walking||donut?.phase==='turn'?Math.atan2(direction[0],direction[2]):donut&&donut.phase!=='done'?eatingYaw:facingCamera;
   root.current.rotation.y+=Math.atan2(Math.sin(yaw-root.current.rotation.y),Math.cos(yaw-root.current.rotation.y))*(1-Math.exp(-dt*7));
   for(const pose of rig.rest){pose.bone.position.copy(pose.position);pose.bone.quaternion.copy(pose.quaternion);pose.bone.scale.copy(pose.scale)}
   if(walking)walkingTime.current+=dt;rig.mixer.setTime(walking?walkingTime.current:0);
@@ -50,7 +51,7 @@ export function Homer3D({state}:{state:LiveState}){
    target.lerpVectors(restHand,target,gesture.weight);
    reachWithArm(root.current,hand,['DEF-arm.R','DEF-humerus.R'].map(bone).filter((b):b is Bone=>!!b),target);
   }
-  if(held.current){held.current.visible=Boolean(donut?.held)&&state.characters.homer.enabled;if(hand&&donut?.held){root.current.updateMatrixWorld(true);held.current.position.lerpVectors(new Vector3(...DONUT_SPOT),hand.getWorldPosition(new Vector3()),MathUtils.smoothstep(elapsed,4700,5000));held.current.quaternion.copy(root.current.quaternion).multiply(new Quaternion().setFromAxisAngle(new Vector3(1,0,0),gesture.carry*Math.PI/2));held.current.scale.setScalar(gesture.scale);}}
+  if(held.current){held.current.visible=Boolean(donut?.held)&&state.characters.homer.enabled;if(hand&&donut?.held){root.current.updateMatrixWorld(true);held.current.position.lerpVectors(new Vector3(...DONUT_SPOT),hand.getWorldPosition(new Vector3()),MathUtils.smoothstep(elapsed,DONUT_TIMES.pickup,DONUT_TIMES.pickup+300));held.current.quaternion.copy(root.current.quaternion).multiply(new Quaternion().setFromAxisAngle(new Vector3(1,0,0),gesture.carry*Math.PI/2));held.current.scale.setScalar(gesture.scale);}}
   // Moving character shadows must not remain at the initial position.
   if(walking||donut||w>.01)gl.shadowMap.needsUpdate=true;
  });

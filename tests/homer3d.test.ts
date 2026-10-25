@@ -10,17 +10,17 @@ test('Homer GLB has a complete symmetric skinned mesh, walk animation and no fac
  for(const channel of animation.channels){const name=json.nodes[channel.target.node].name;if(!/^DEF-foot\./.test(name)||channel.target.path!=='translation')continue;const accessor=json.accessors[animation.samplers[channel.sampler].output],view=json.bufferViews[accessor.bufferView],offset=binaryStart+(view.byteOffset||0)+(accessor.byteOffset||0);for(let axis=0;axis<3;axis++)assert.ok(Math.abs(b.readFloatLE(offset+axis*4)-b.readFloatLE(offset+((accessor.count-1)*3+axis)*4))<.001,'walk cycle must close without a foot jump');}
 
 });
-test('Donut route is continuous, finishes at home and keeps feet in front of the table',()=>{
+test('Donut route is continuous, finishes at home and crosses the existing doorway and avoids the furniture',()=>{
  assert.deepEqual(donutPose(0).position,HOMER_HOME);assert.deepEqual(donutPose(DONUT_DURATION).position,HOMER_HOME);assert.equal(donutPose(DONUT_DURATION).walking,false);
- for(let t=10;t<=DONUT_DURATION;t+=10){const a=donutPose(t-10),b=donutPose(t);assert.ok(Math.hypot(...b.position.map((v,i)=>v-a.position[i]))<.03);assert.ok(b.position[2]>=1);assert.equal(b.position[1],0)}
- assert.equal(donutPose(5000).held,true);assert.equal(donutPose(7900).held,false);
+ for(let t=10;t<=DONUT_DURATION;t+=10){const a=donutPose(t-10),b=donutPose(t);assert.ok(Math.hypot(...b.position.map((v,i)=>v-a.position[i]))<.03);if(Math.abs(b.position[0]+5)<.15)assert.ok(Math.abs(b.position[2]+2.4)<.05,'cross through doorway');assert.equal(b.position[1],0)}
+ assert.equal(donutPose(18000).held,true);assert.equal(donutPose(24000).held,false);
 });
 test('Donut action rejects overlap, freezes during pause and completes once',()=>{
  const now=1800000000000,s=createInitialState(now);s.settings.mode='manual';const startHunger=s.homer.hunger;
  assert.equal(applyAction(s,{type:'INTERACT_WITH_OBJECT',object:'donut'},now).ok,true);
  assert.equal(applyAction(s,{type:'INTERACT_WITH_OBJECT',object:'donut'},now).ok,false);assert.equal(applyAction(s,{type:'MOVE_TO_ROOM',room:'kitchen'},now).ok,false);
  applyAction(s,{type:'PAUSE',paused:true},now+1000);tick(s,now+20000,0);assert.ok(s.interaction);applyAction(s,{type:'PAUSE',paused:false},now+21000);assert.equal(s.interaction!.startedAt,now+20000);
- tick(s,now+32001,0);assert.equal(s.interaction,undefined);assert.equal(s.homer.hunger,startHunger-15);tick(s,now+40000,0);assert.equal(s.homer.hunger,startHunger-15);
+ tick(s,now+20000+DONUT_DURATION+1,0);assert.equal(s.interaction,undefined);assert.equal(s.homer.hunger,startHunger-15);tick(s,now+20000+DONUT_DURATION+1000,0);assert.equal(s.homer.hunger,startHunger-15);
  s.room='kitchen';assert.equal(applyAction(s,{type:'INTERACT_WITH_OBJECT',object:'donut'},now+40001).ok,false);
 });
 test('Local response carries the selected comment and validates optional profile photos',()=>{
@@ -32,17 +32,17 @@ test('Local response carries the selected comment and validates optional profile
 
 test('Donut carry, bites and arm release are continuous and finish at rest',async()=>{
  const {donutGesture}=await import('../shared/homerMotion');
- assert.equal(donutGesture(3500).weight,0);assert.equal(donutGesture(4700).carry,0);assert.equal(donutGesture(5900).carry,1);
- assert.equal(donutGesture(6200).scale,1);assert.ok(donutGesture(6800).scale<.6);assert.equal(donutGesture(7500).scale,0);assert.equal(donutGesture(8000).weight,0);
- for(let t=3501;t<=8000;t++){const a=donutGesture(t-1),b=donutGesture(t);for(const key of Object.keys(a)as (keyof typeof a)[])assert.ok(Math.abs(a[key]-b[key])<.01,`${key} is continuous at ${t}`)}
+ assert.equal(donutGesture(14000).weight,0);assert.equal(donutGesture(16000).carry,0);assert.equal(donutGesture(18500).carry,1);
+ assert.equal(donutGesture(19000).scale,1);assert.ok(donutGesture(21000).scale<.6);assert.equal(donutGesture(23000).scale,0);assert.equal(donutGesture(24500).weight,0);
+ for(let t=14001;t<=24500;t++){const a=donutGesture(t-1),b=donutGesture(t);for(const key of Object.keys(a)as (keyof typeof a)[])assert.ok(Math.abs(a[key]-b[key])<.01,`${key} is continuous at ${t}`)}
 });
 
 test('Real GLB rig reaches the donut and mouth without stretching arm bones',async()=>{
  const {GLTFLoader}=await import('three/examples/jsm/loaders/GLTFLoader.js');const {Group,Vector3,Quaternion}=await import('three');const {createHomerRig,rotateBoneInWorld,reachWithArm}=await import('../src/scene/homerRig');const {donutGesture,DONUT_SPOT,DONUT_BITE_TARGET}=await import('../shared/homerMotion');
- const file=readFileSync('public/models/homer/homer.glb');const asset=await new GLTFLoader().parseAsync(file.buffer.slice(file.byteOffset,file.byteOffset+file.byteLength),'');const rig=createHomerRig(asset),root=new Group(),offset=new Group();offset.position.set(...rig.offset);offset.scale.setScalar(rig.scale);offset.add(rig.scene);root.add(offset);root.position.set(.3,0,1);
+ const file=readFileSync('public/models/homer/homer.glb');const asset=await new GLTFLoader().parseAsync(file.buffer.slice(file.byteOffset,file.byteOffset+file.byteLength),'');const rig=createHomerRig(asset),root=new Group(),offset=new Group();offset.position.set(...rig.offset);offset.scale.setScalar(rig.scale);offset.add(rig.scene);root.add(offset);root.position.set(-8.95,0,.3);
  const arm=rig.bone('DEF-arm.R')!,shoulder=rig.bone('DEF-humerus.R')!,hand=rig.bone('DEF-hand-middle1.R')!;
- for(const t of [4700,5000,5900,6500,7700]){
-  rig.restore(rig.rest);rig.restore(rig.legs);const pose=donutGesture(t);root.rotation.y=Math.PI+Math.PI*pose.faceCamera;root.updateMatrixWorld(true);
+ for(const t of [16000,17000,18500,21000,24000]){
+  rig.restore(rig.rest);rig.restore(rig.legs);const pose=donutGesture(t);root.rotation.y=-Math.PI/2+Math.PI/2*pose.faceCamera;root.updateMatrixWorld(true);
   rotateBoneInWorld(rig.bone('DEF-hips')!,new Quaternion().setFromAxisAngle(new Vector3(1,0,0).applyQuaternion(root.quaternion),pose.lean));root.updateMatrixWorld(true);
   const length=shoulder.getWorldPosition(new Vector3()).distanceTo(arm.getWorldPosition(new Vector3()));
   const target=new Vector3(...DONUT_SPOT).lerp(root.localToWorld(new Vector3(...DONUT_BITE_TARGET)),pose.carry);target.lerpVectors(hand.getWorldPosition(new Vector3()),target,pose.weight);
@@ -51,3 +51,21 @@ test('Real GLB rig reaches the donut and mouth without stretching arm bones',asy
  }
  rig.mixer.stopAllAction();rig.mixer.uncacheRoot(rig.scene);
 });
+
+ test('Kitchen sequence locks competing camera and animation actions without editing presets',()=>{
+ const s=createInitialState(),camera=s.cameraId,presets=JSON.stringify(s.cameras),now=Date.now();s.settings.mode='auto';
+ applyAction(s,{type:'INTERACT_WITH_OBJECT',object:'donut'},now);
+ assert.equal(s.interaction?.duration,38000);
+ assert.equal(applyAction(s,{type:'CHANGE_CAMERA',cameraId:'kitchen-front'},now).ok,false);
+ assert.equal(applyAction(s,{type:'PLAY_ANIMATION',character:'homer',activity:'sleeping'},now).ok,false);
+ tick(s,now+18000,0);assert.equal(s.room,'kitchen');assert.equal(s.cameraId,camera);
+ tick(s,now+38001,0);assert.equal(s.room,'living');assert.equal(s.cameraId,camera);assert.equal(JSON.stringify(s.cameras),presets);
+ });
+
+ test('Donut route clears furniture footprints and camera switches near the real doorway',async()=>{
+ const {donutCamera}=await import('../shared/homerMotion');
+ const obstacles=[[-.4,-.05,2.9,1.4],[-.45,-2.8,4.78,1.65],[-3.5,.6,1.9,1.1],[-11,.3,2.9,1.7],[-7.2,-3.12,1.45,1.3],[-11,-1.12,.76,.73]];
+ for(let t=0;t<=DONUT_DURATION;t+=25){const [x,,z]=donutPose(t).position;for(const [cx,cz,w,d]of obstacles){const dx=Math.max(0,Math.abs(x-cx)-w/2),dz=Math.max(0,Math.abs(z-cz)-d/2);assert.ok(Math.hypot(dx,dz)>.35,`furniture clearance at ${t}`);}}
+ const p=donutPose(8000).position;assert.ok(Math.hypot(p[0]+5,p[2]+2.4)>1.5);assert.ok(Math.hypot(p[0]+5,p[2]+2.4)<3);
+ assert.equal(donutCamera(7999)?.id,'eyes');assert.equal(donutCamera(8000)?.id,'door');assert.equal(donutCamera(18000)?.id,'kitchen');assert.equal(donutCamera(37000),null);
+ });

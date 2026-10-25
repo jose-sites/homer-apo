@@ -1,3 +1,4 @@
+import {DONUT_TIMES} from '../../shared/homerMotion';
 import {useEffect,useMemo} from 'react';
 import {Shape,ExtrudeGeometry} from 'three';
 import type {LiveState,Action,Vec3} from '../../shared/types';
@@ -17,7 +18,7 @@ export function ReferenceLiving({state,onAction}:{state:LiveState;onAction:(a:Ac
   <UpholsteredSofa/><LivingDetails/><StairFinish/><RoomDaylight on={!night&&state.power} shadows={state.settings.quality!=='low'}/>
   <TextileRug/>
   <CraftedTable p={[-.4,0,-.05]}/><ContactShade p={[-.4,.01,-.05]} size={[3.6,2.1]}/>
-  <Cylinder p={[.3,.73,-.1]} r={.27} h={.03} c="#f9c2cd"/>{(!state.interaction||Date.now()-state.interaction.startedAt<4700)&&<group onClick={()=>onAction({type:'INTERACT_WITH_OBJECT',object:'donut'})}><Donut p={[.3,.81,-.1]} scale={.8}/></group>}<Mug p={[-1.1,.7,-.2]} color="#e9c434"/>
+  <Cylinder p={[.3,.73,-.1]} r={.27} h={.03} c="#f9c2cd"/>{<group onClick={()=>onAction({type:'INTERACT_WITH_OBJECT',object:'donut'})}><Donut p={[.3,.81,-.1]} scale={.8}/></group>}<Mug p={[-1.1,.7,-.2]} color="#e9c434"/>
   <Box p={[-.1,.73,.25]} s={[.42,.025,.24]} c="#e785a3"/>
   <Picture p={[-.45,2.58,-3.87]} size={[1.75,1.2]}/><Picture p={[-1.95,2.5,-3.87]} size={[.4,.6]} kind="family"/><Picture p={[1.05,2.5,-3.87]} size={[.4,.6]} kind="family"/>
   <Sideboard p={[-3.15,0,-2.9]}/><group position={[-3.15,.98,-2.9]}><DetailedLamp on={state.power}/></group>
@@ -43,6 +44,9 @@ export function ReferenceKitchen({state,onAction}:{state:LiveState;onAction:(a:A
   {[-.25,.05,.35,.65].map(x=><Cylinder key={x} p={[x,.98,-2.84]} r={.04} h={.04} rotation={[Math.PI/2,0,0]} c="#e7d2ad"/>)}<Box p={[.2,.81,-2.8]} s={[.88,.06,.08]} c="#d1d6ca"/>
   <Box p={[.2,2.18,-3.42]} s={[1.4,.18,1.1]} c="#c5a280"/><Box p={[.2,2.42,-3.69]} s={[.8,.38,.48]} c="#c0a380"/>
   <Fridge state={state} onAction={onAction}/>
+  <Cylinder p={[0,.94,.3]} r={.46} h={.025} c="#f9c2cd"/>
+  {[[-.25,.02],[-.25,.65],[.15,.65]].map(([x,z],i)=><Donut key={i} p={[x,.99,z]} scale={.65}/>)}
+  {(!state.interaction||Date.now()-state.interaction.startedAt<DONUT_TIMES.pickup)&&<Donut p={[.15,1.01,.3]} scale={.8}/>}
   <CraftedTable p={[-1,0,.3]} kitchen/>{[-1.9,-.1].map(x=><CraftedChair key={x} p={[x,0,1.65]} r={Math.PI}/>)}<CraftedChair p={[-1,0,-1.12]} r={0}/><CraftedChair p={[-2.9,0,.3]} r={Math.PI/2}/>
   <Rounded p={[-1.3,.99,.25]} s={[.65,.19,.45]} c="#d98e48"/><Box p={[-1.3,1.095,.25]} s={[.55,.025,.38]} c="#f3bd85"/><Mug p={[-.4,.94,.3]} color="#47b6c8"/>
   <Box p={[-4.15,1.35,-3.38]} s={[.7,.45,.5]} c="#378ea4"/><Box p={[-4.2,1.35,-3.11]} s={[.43,.3,.02]} c="#244753"/>
