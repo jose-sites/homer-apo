@@ -31,7 +31,7 @@ export const ActionSchema=z.discriminatedUnion('type',[
  z.object({type:z.literal('UPDATE_EVENT'),eventId:id,patch:z.object({enabled:z.boolean().optional(),probability:bounded(0,1).optional(),cooldown:bounded(10,86400).optional(),duration:bounded(1,600).optional(),priority:bounded(0,10).optional()}).strict()}).strict(),
  z.object({type:z.literal('ADD_CAMERA'),camera:cameraSchema}).strict(),
  z.object({type:z.literal('ADD_LINE'),line:z.object({id,character,category:z.string().min(1).max(60),text}).strict()}).strict(),
- z.object({type:z.literal('CHAT'),user:z.string().trim().min(1).max(30),text:z.string().trim().min(1).max(280),source:z.enum(['test','local']).optional(),avatarUrl:z.string().max(2048).url().regex(/^https:\/\//).optional()}).strict(),
+ z.object({type:z.literal('CHAT'),user:z.string().trim().min(1).max(30),text:z.string().trim().min(1).max(280),source:z.enum(['test','local','tiktok']).optional(),avatarUrl:z.string().max(2048).url().regex(/^https:\/\//).optional()}).strict(),
  z.object({type:z.literal('SELECT_CHAT'),messageId:id}).strict(),
  z.object({type:z.literal('GAME_INPUT'),value:z.string().trim().min(1).max(80),user:z.string().trim().min(1).max(30).optional()}).strict(),
  z.object({type:z.literal('APPROVE_PROPOSAL'),id}).strict(),
@@ -277,7 +277,7 @@ function familyInteraction(state:LiveState,now:number){
 }
 function localResponse(state:LiveState,now:number){
  const rt=runtime(state,now);if(now-rt.lastResponse<state.settings.responseCooldown*1000)return;
- const available=state.chat.filter(m=>!rt.responses.has(m.id)&&now-m.at<180000);
+ const available=state.chat.filter(m=>!rt.responses.has(m.id)&&now-m.at<180000).sort((a,b)=>(b.priority||0)-(a.priority||0));
  const message=available.find(m=>m.selected)||available.find(m=>/\?|homer|rosquinha|jogo|olá|oi\b/i.test(m.text));
  if(!message||state.speechQueue.length>3)return;
  let response='Essa é uma boa conversa. Vou pensar nisso enquanto procuro uma rosquinha.';
@@ -287,9 +287,9 @@ function localResponse(state:LiveState,now:number){
  else if(/lisa|bart|marge|maggie/i.test(message.text))response='A família inteira está por aqui. Alguém sempre tem alguma coisa para dizer.';
  else if(/trabalho|usina/i.test(message.text))response='O trabalho está ótimo quando eu estou aqui no sofá.';
  // Never interpret chat as code or structured actions; it is untrusted dialogue only.
- const accepted=state.settings.mode==='semi'||say(state,'homer',response,now,4).ok;
+ const accepted=state.settings.mode==='semi'||say(state,'homer',response,now,message.priority||4).ok;
  if(accepted){
-  if(state.settings.mode==='semi'){state.proposals.push({id:uid('proposal',now),action:{type:'TALK',character:'homer',text:response,priority:4},reason:'Resposta local sugerida para uma mensagem do chat.',replyTo:{...message}});state.proposals=state.proposals.slice(-8);}
+  if(state.settings.mode==='semi'){state.proposals.push({id:uid('proposal',now),action:{type:'TALK',character:'homer',text:response,priority:message.priority||4},reason:'Resposta local sugerida para uma mensagem do chat.',replyTo:{...message}});state.proposals=state.proposals.slice(-8);}
   if(state.settings.mode!=='semi'){const speech=state.speechQueue.find(s=>s.character==='homer'&&s.createdAt===now&&s.text===response);if(speech)speech.replyTo={...message};}
   rt.responses.add(message.id);message.selected=true;rt.lastResponse=now;state.memory.push(`Chat comentou: ${message.text.slice(0,140)} · ${state.settings.mode==='semi'?'Sugestão':'Homer'}: ${response}`);state.memory=state.memory.slice(-30);
  }

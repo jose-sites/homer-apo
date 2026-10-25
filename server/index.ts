@@ -1,3 +1,4 @@
+import {TikTokBridge,GIFTS} from './tiktok';
 import {loadEnvironment,configurationWarnings} from './config.ts';
 import {ROOMS} from '../shared/data';
 import {LAYOUT_REVISION,MIRRORED_ROOMS} from '../shared/referenceLayout';
@@ -192,6 +193,12 @@ export function createServer(options: ServerOptions = {}) {
   app.get('/api/state', (_req, res) => res.json(publicState()));
   app.get('/api/diagnostics', async (_req, res) => res.json({ uptimeSeconds: Math.floor((Date.now() - boot) / 1000), websocketClients: wss.clients.size, database: db.stats(), providers: capabilities, audioCache: await audio.stats(), aiBusy, lastProviderError: providerError, persistenceError, processMemoryMB: Math.round(process.memoryUsage().rss / 1_048_576) }));
   app.get('/api/history', (_req, res) => res.json({ events: db.recentEvents() }));
+  const tiktok=new TikTokBridge(state,env,broadcast);
+  app.get('/api/tiktok/status',(_req,res)=>res.json(tiktok.info()));
+  app.post('/api/tiktok/connect',async(_req,res)=>{try{await tiktok.start();res.json(tiktok.info())}catch(e){res.status(503).json({error:(e as Error).message})}});
+  app.post('/api/tiktok/disconnect',(_req,res)=>{tiktok.stop();res.json({ok:true})});
+  app.post('/api/tiktok/confirm-end',(req,res)=>res.status(tiktok.confirm(req.body?.id)?200:409).json(tiktok.info()));
+  app.post('/api/tiktok/demo',(req,res)=>{const b=req.body;if(env.TIKTOK_DEMO==='false')return res.status(403).json({error:'Demo desativada'});if(typeof b?.user!=='string'||!b.user.trim()||b.user.length>30)return res.status(400).json({error:'Usuário inválido'});if(b.kind==='chat'&&typeof b.text==='string'&&b.text.length<=280)tiktok.chat(randomUUID(),b.user,b.text,false);else if(b.kind==='gift'&&Object.hasOwn(GIFTS,b.gift))tiktok.gift(randomUUID(),b.user,b.gift);else return res.status(400).json({error:'Evento inválido'});res.json(tiktok.info())});
   app.post('/api/action', (req, res) => {
     const result = applyAction(state, req.body, Date.now());
     if (result.ok) {
@@ -229,7 +236,7 @@ export function createServer(options: ServerOptions = {}) {
       if (state.paused || !state.settings.aiEnabled) throw new ProviderError('Resposta descartada: operação pausada ou IA desativada durante a requisição.', 409);
       for (const action of actions) {
         if (state.settings.mode === 'semi') state.proposals.push({ id: randomUUID(), action: action as LiveState['proposals'][number]['action'], reason: 'Sugestão da IA; aguarda aprovação do operador.',replyTo:message?{...message}:undefined });
-        else { const previousIds=new Set(state.speechQueue.map(s=>s.id));const result = applyAction(state, action, Date.now()); if (!result.ok) throw new ProviderError(result.error || 'Ação indisponível.');if(message)for(const speech of state.speechQueue)if(speech.character==='homer'&&!previousIds.has(speech.id))speech.replyTo={...message}; }
+        else { const previousIds=new Set(state.speechQueue.map(s=>s.id));const result = applyAction(state, action, Date.now()); if (!result.ok) throw new ProviderError(result.error || 'Ação indisponível.');if(message)for(const speech of state.speechQueue)if(speech.character==='homer'&&!previousIds.has(speech.id)){speech.replyTo={...message};speech.priority=Math.max(speech.priority,message.priority||0);}state.speechQueue.sort((a,b)=>b.priority-a.priority); }
       }
       state.proposals = state.proposals.slice(-20);
       const spoken = actions.filter((a:any)=>a.type==='TALK').map((a:any)=>String(a.text).slice(0,350));
@@ -289,7 +296,7 @@ export function createServer(options: ServerOptions = {}) {
       try {
         tick(state, now, elapsed);
         if (!state.paused && state.settings.mode !== 'manual' && state.settings.aiEnabled && state.settings.provider === 'openai-compatible' && !aiBusy && now - lastAIAt >= state.settings.responseCooldown * 1000) {
-          const selected = state.chat.find(m => m.selected && !processedMessages.has(m.id));
+          const selected = state.chat.filter(m => m.selected && !processedMessages.has(m.id)).sort((a,b)=>(b.priority||0)-(a.priority||0))[0];
           if (selected) { processedMessages.add(selected.id); void respond(selected.id, true).catch(() => undefined); }
           else if (shouldComment(state, now, lastAIAt, boot)) void respond(undefined, true).catch(() => undefined);
         }
@@ -306,7 +313,7 @@ export function createServer(options: ServerOptions = {}) {
   }
   async function close() {
     if (closed) return;
-    closed = true; aiGeneration++; shutdown.abort(); if (ticker) clearInterval(ticker); if (pingTimer) clearInterval(pingTimer); if (persistTimer) clearTimeout(persistTimer);
+    tiktok.stop(); closed = true; aiGeneration++; shutdown.abort(); if (ticker) clearInterval(ticker); if (pingTimer) clearInterval(pingTimer); if (persistTimer) clearTimeout(persistTimer);
     persist();
     for (const ws of wss.clients) ws.terminate();
     await new Promise<void>(done => wss.close(() => done()));

@@ -168,3 +168,18 @@ test('Shutdown aborts an in-flight provider request and prevents late state muta
     assert.equal(providerSignal!.aborted, true); assert.equal((await pending).status, 502); assert.equal(f.server.state.speechQueue.length, 0);
   } finally { await f.close(); }
 });
+
+test('TikTok routes authenticate, accept offline demo and require explicit end confirmation', async () => {
+ const f=await fixture({env:{ADMIN_TOKEN:'test-token'}}),headers={Authorization:'Bearer test-token'};
+ try {
+  assert.equal((await post(`${f.url}/api/tiktok/demo`,{kind:'gift',user:'visitor',gift:'heart'})).status,401);
+  assert.equal((await post(`${f.url}/api/tiktok/connect`,{},headers)).status,503);
+  assert.equal((await post(`${f.url}/api/tiktok/demo`,{kind:'chat',user:'visitor',text:'Olá Homer'},headers)).status,200);
+  assert.equal(f.server.state.chat.at(-1)?.selected,true);
+  const event=await (await post(`${f.url}/api/tiktok/demo`,{kind:'gift',user:'visitor',gift:'heart'},headers)).json();
+  assert.equal(f.server.state.paused,false);
+  assert.equal((await post(`${f.url}/api/tiktok/confirm-end`,{id:'wrong'},headers)).status,409);
+  assert.equal((await post(`${f.url}/api/tiktok/confirm-end`,{id:event.pendingEnd.id},headers)).status,200);
+  assert.equal(f.server.state.paused,true);
+ } finally {await f.close();}
+});
