@@ -9,3 +9,7 @@
 - IA e TTS reais não foram chamados nesta etapa. Não há integração de presentes TikTok nem encerramento real da live.
 
 As capturas são evidência de renderização, não uma promessa de FPS em qualquer computador.
+
+## Atualização — interação finalizada
+
+A pendência da posição da mão foi resolvida posteriormente. Consulte `../../DONUT-INTERACTION.md` e as capturas em `../donut/`; o registro acima descreve somente a entrega anterior.

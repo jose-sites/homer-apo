@@ -29,3 +29,25 @@ test('Local response carries the selected comment and validates optional profile
  assert.equal(applyAction(s,{type:'CHAT',user:'visitor',text:'Oi Homer!',avatarUrl:'https://example.org/photo.png'},now).ok,true);
  tick(s,now+20000,0);const reply=s.speechQueue.find(q=>q.replyTo);assert.equal(reply?.replyTo?.text,'Oi Homer!');assert.equal(reply?.replyTo?.avatarUrl,'https://example.org/photo.png');
 });
+
+test('Donut carry, bites and arm release are continuous and finish at rest',async()=>{
+ const {donutGesture}=await import('../shared/homerMotion');
+ assert.equal(donutGesture(3500).weight,0);assert.equal(donutGesture(4700).carry,0);assert.equal(donutGesture(5900).carry,1);
+ assert.equal(donutGesture(6200).scale,1);assert.ok(donutGesture(6800).scale<.6);assert.equal(donutGesture(7500).scale,0);assert.equal(donutGesture(8000).weight,0);
+ for(let t=3501;t<=8000;t++){const a=donutGesture(t-1),b=donutGesture(t);for(const key of Object.keys(a)as (keyof typeof a)[])assert.ok(Math.abs(a[key]-b[key])<.01,`${key} is continuous at ${t}`)}
+});
+
+test('Real GLB rig reaches the donut and mouth without stretching arm bones',async()=>{
+ const {GLTFLoader}=await import('three/examples/jsm/loaders/GLTFLoader.js');const {Group,Vector3,Quaternion}=await import('three');const {createHomerRig,rotateBoneInWorld,reachWithArm}=await import('../src/scene/homerRig');const {donutGesture,DONUT_SPOT,DONUT_BITE_TARGET}=await import('../shared/homerMotion');
+ const file=readFileSync('public/models/homer/homer.glb');const asset=await new GLTFLoader().parseAsync(file.buffer.slice(file.byteOffset,file.byteOffset+file.byteLength),'');const rig=createHomerRig(asset),root=new Group(),offset=new Group();offset.position.set(...rig.offset);offset.scale.setScalar(rig.scale);offset.add(rig.scene);root.add(offset);root.position.set(.3,0,1);
+ const arm=rig.bone('DEF-arm.R')!,shoulder=rig.bone('DEF-humerus.R')!,hand=rig.bone('DEF-hand-middle1.R')!;
+ for(const t of [4700,5000,5900,6500,7700]){
+  rig.restore(rig.rest);rig.restore(rig.legs);const pose=donutGesture(t);root.rotation.y=Math.PI+Math.PI*pose.faceCamera;root.updateMatrixWorld(true);
+  rotateBoneInWorld(rig.bone('DEF-hips')!,new Quaternion().setFromAxisAngle(new Vector3(1,0,0).applyQuaternion(root.quaternion),pose.lean));root.updateMatrixWorld(true);
+  const length=shoulder.getWorldPosition(new Vector3()).distanceTo(arm.getWorldPosition(new Vector3()));
+  const target=new Vector3(...DONUT_SPOT).lerp(root.localToWorld(new Vector3(...DONUT_BITE_TARGET)),pose.carry);target.lerpVectors(hand.getWorldPosition(new Vector3()),target,pose.weight);
+  const error=reachWithArm(root,hand,[arm,shoulder],target);assert.ok(error<.06,`hand misses target by ${error}m at ${t}`);
+  assert.ok(Math.abs(length-shoulder.getWorldPosition(new Vector3()).distanceTo(arm.getWorldPosition(new Vector3())))<.0001,'upper arm must not stretch');
+ }
+ rig.mixer.stopAllAction();rig.mixer.uncacheRoot(rig.scene);
+});

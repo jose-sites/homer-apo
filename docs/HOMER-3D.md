@@ -32,4 +32,4 @@ Checkpoint de recuperação anterior: tag `before-3d-homer-20261024`.
 
 ## Resultado desta entrega
 
-82 testes passaram; build normal e Pages concluídos. Capturas reais em `docs/captures/homer3d/`. O navegador confirmou 9:16, comentário selecionado e o ciclo de visibilidade da coluna. A captura final do retorno excedeu o timeout e não foi repetida. O último ajuste da posição da mão ao comer ainda precisa de revisão visual; detalhes em `docs/captures/homer3d/VALIDATION.md`.
+82 testes passaram; build normal e Pages concluídos. Capturas reais em `docs/captures/homer3d/`. O navegador confirmou 9:16, comentário selecionado e o ciclo de visibilidade da coluna. A captura final do retorno excedeu o timeout e não foi repetida. Essa pendência foi resolvida na finalização documentada em `DONUT-INTERACTION.md`, com teste do rig real e novas capturas da coleta, alimentação e retorno.
