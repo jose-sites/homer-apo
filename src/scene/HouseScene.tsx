@@ -1,3 +1,4 @@
+import {irlPose} from '../../shared/irl';
 import {donutCamera} from '../../shared/homerMotion';
 import { Suspense, useEffect, useRef, useState, useMemo } from 'react';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
@@ -27,7 +28,7 @@ function World({state,onAction,onMetrics,explore,onCameraPose,onFade}:Props&{onF
  const active=state.cameras.find(c=>c.id===state.cameraId)||CAMERAS[0];
  const room=ROOMS.find(r=>r.id===active.room)||ROOMS[0];const night=state.virtualHour<6||state.virtualHour>18;
  const exterior=room.kind==='exterior';const [travelRoom,setTravelRoom]=useState(room.id);
- const detailedRoom=state.interaction?state.room:state.movement?travelRoom:room.id;
+ const detailedRoom=(state.interaction||state.irl)?state.room:state.movement?travelRoom:room.id;
  const visible=useMemo(()=>{
   if(exterior)return ROOMS.filter(r=>r.floor>=0&&r.floor<2&&!['yard','bathroom'].includes(r.id));
   const ids=new Set([room.id,...room.neighbors]);
@@ -49,7 +50,7 @@ function World({state,onAction,onMetrics,explore,onCameraPose,onFade}:Props&{onF
   {exterior&&<Facade night={night}/>}
   {state.weather==='rain'&&<Rain origin={room.origin} paused={state.paused}/>}
   <Director state={state} explore={Boolean(explore)} onCameraPose={onCameraPose} onFade={onFade}/>
-  {explore&&!state.movement&&!state.interaction&&<OrbitControls makeDefault target={[room.origin[0],room.origin[1]+1.3,room.origin[2]-1]} maxPolarAngle={Math.PI*.75} minPolarAngle={.25} minDistance={.8} maxDistance={exterior?36:7} enableDamping dampingFactor={.08}/>}
+  {explore&&!state.irl&&!state.movement&&!state.interaction&&<OrbitControls makeDefault target={[room.origin[0],room.origin[1]+1.3,room.origin[2]-1]} maxPolarAngle={Math.PI*.75} minPolarAngle={.25} minDistance={.8} maxDistance={exterior?36:7} enableDamping dampingFactor={.08}/>}
   <Metrics onMetrics={onMetrics} adaptive={state.settings.adaptiveQuality} quality={state.settings.quality}/>
  </>
 }
@@ -76,12 +77,13 @@ function Director({state,explore,onCameraPose,onFade}:{state:LiveState;explore:b
   if(pending.current&&now>=pending.current.at){camera.position.copy(pending.current.position);target.current.copy(pending.current.target);(camera as PerspectiveCamera).fov=pending.current.fov;pending.current=null;onFade(false);}
   if(state.interaction){
    if(state.paused)return;
-   if(cinematic.current?.id!==state.interaction.id)cinematic.current={id:state.interaction.id,shot:'',at:0,saved:{position:camera.position.toArray()as Vec3,target:target.current.toArray()as Vec3,fov:(camera as PerspectiveCamera).fov}};
+   if(cinematic.current?.id!==state.interaction.id)cinematic.current={id:state.interaction.id,shot:'',at:0,saved:state.irl?{position:preset.position,target:preset.target,fov:preset.fov}:{position:camera.position.toArray()as Vec3,target:target.current.toArray()as Vec3,fov:(camera as PerspectiveCamera).fov}};
    const sequence=cinematic.current,shot=donutCamera(Date.now()-state.interaction.startedAt),pose=shot||{...sequence.saved,id:'home'};
    if(sequence.shot!==pose.id){sequence.shot=pose.id;sequence.at=now+190;onFade(true);}
    if(now>=sequence.at){camera.position.set(...pose.position);target.current.lerp(new Vector3(...pose.target),pose.id==='eyes'?1-Math.exp(-dt*9):1);(camera as PerspectiveCamera).fov=pose.fov;camera.lookAt(target.current);(camera as PerspectiveCamera).updateProjectionMatrix();onFade(false);}
    return;
   }else if(cinematic.current){const saved=cinematic.current.saved;camera.position.set(...saved.position);target.current.set(...saved.target);(camera as PerspectiveCamera).fov=saved.fov;cinematic.current=null;onFade(false);}
+  if(state.irl&&!state.interaction){if(state.paused)return;const p=irlPose(Date.now()-state.irl.startedAt),d=new Vector3(...p.direction).normalize(),pos=new Vector3(...p.position);camera.position.lerp(pos.clone().addScaledVector(d,.65).add(new Vector3(0,1.75,0)),1-Math.exp(-dt*5));target.current.copy(pos).add(new Vector3(0,1.35,0));camera.lookAt(target.current);(camera as PerspectiveCamera).fov=85;(camera as PerspectiveCamera).updateProjectionMatrix();return;}
   if(state.movement){
    if(movementStart.current?.id!==state.movement.startedAt)movementStart.current={id:state.movement.startedAt,at:now,elapsed:Math.max(0,Date.now()-state.movement.startedAt)};
    const m=movementStart.current;if(!state.paused)m.elapsed+=dt*1000;

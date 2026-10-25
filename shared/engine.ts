@@ -1,3 +1,4 @@
+import {irlPose,IRL_DURATION} from './irl';
 import {DONUT_DURATION,donutPose} from './homerMotion';
 import {LAYOUT_REVISION,STAIR_BOTTOM,STAIR_TOP} from './referenceLayout';
 import { z } from 'zod';
@@ -15,6 +16,7 @@ const vec=z.tuple([bounded(-250,250),bounded(-20,50),bounded(-250,250)]);
 export const SettingsSchema=z.object({mode:z.enum(['manual','semi','auto']),autoCamera:z.boolean(),aiEnabled:z.boolean(),familyEnabled:z.boolean(),eventsEnabled:z.boolean(),quality:z.enum(['low','medium','high']),adaptiveQuality:z.boolean(),masterVolume:bounded(0,1),effectsVolume:bounded(0,1),familyMin:bounded(30,1800),familyMax:bounded(30,3600),responseCooldown:bounded(5,600),cameraInterval:bounded(8,300),timeMode:z.enum(['real','accelerated','fixed']),timeScale:bounded(0.1,3600),retentionDays:bounded(1,90).int(),cleanOverlay:z.boolean(),provider:z.enum(['demo','openai-compatible']),ttsProvider:z.enum(['browser','openai-compatible','silent'])}).strict();
 const cameraSchema=z.object({id,name:z.string().trim().min(1).max(100),room:id,position:vec,target:vec,fov:bounded(20,95),type:z.enum(['frontal','wide','reaction','first-person','environment','follow']),transition:z.enum(['cut','smooth','fade'])}).strict();
 export const ActionSchema=z.discriminatedUnion('type',[
+ z.object({type:z.literal('IRL'),enabled:z.boolean()}).strict(),
  z.object({type:z.literal('TALK'),character,text,priority:bounded(0,10).optional()}).strict(),
  z.object({type:z.literal('REACT'),character,expression}).strict(),
  z.object({type:z.literal('CHANGE_CAMERA'),cameraId:id}).strict(),
@@ -202,9 +204,14 @@ export function applyAction(state:LiveState,value:unknown,now=Date.now()):{ok:bo
  const action=valid.action;
  if(state.paused&&!PAUSED_ALLOWED.has(action.type))return {ok:false,error:'A operação está pausada. Retome para executar esta ação.'};
  if(state.interaction&&(['CHANGE_CAMERA','MOVE_TO_ROOM','PLAY_ANIMATION','REACT','INTERACT_WITH_OBJECT','TRIGGER_EVENT'].includes(action.type)||(action.type==='CHARACTER'&&action.character==='homer')))return {ok:false,error:'Aguarde Homer voltar da cozinha.'};
+ if(state.irl&&!state.interaction){
+ if(action.type==='INTERACT_WITH_OBJECT'&&action.object==='donut'){state.irl.pendingDonuts=Math.min(3,state.irl.pendingDonuts+1);return {ok:true};}
+ if(['MOVE_TO_ROOM','CHANGE_CAMERA','PLAY_ANIMATION','INTERACT_WITH_OBJECT','TRIGGER_EVENT'].includes(action.type))return {ok:false,error:'Aguarde o passeio IRL terminar.'};
+ }
  const rt=runtime(state,now);
  let result:{ok:boolean;error?:string}={ok:true};
  switch(action.type){
+  case 'IRL':if(state.interaction||state.movement)return {ok:false,error:'Aguarde a animação atual.'};if(action.enabled){if(state.room!=='living')return {ok:false,error:'Inicie na sala.'};state.irl??={enabled:true,startedAt:now,pendingDonuts:0};state.irl.enabled=true;state.doors['kitchen-living']=true;}else if(state.irl)state.irl.enabled=false;break;
   case 'TALK':result=say(state,action.character,action.text,now,action.priority??5);break;
   case 'REACT':state.characters[action.character].expression=action.expression;break;
   case 'CHANGE_CAMERA':if(!state.cameras.some(c=>c.id===action.cameraId))return {ok:false,error:'Câmera inexistente.'};state.cameraId=action.cameraId;rt.lastCamera=now;break;
@@ -234,7 +241,7 @@ export function applyAction(state:LiveState,value:unknown,now=Date.now()):{ok:bo
   case 'RESPOND_TO_FAMILY':result=speakBank(state,action.character,now,'família',4);if(result.ok&&action.character!=='homer')say(state,'homer',`Tudo bem, ${state.characters[action.character].name}. Estou ouvindo!`,now,3);break;
   case 'PAUSE':{
    if(action.paused&&!state.paused)rt.pausedAt=now;
-   if(!action.paused&&state.paused){const elapsed=Math.max(0,now-(rt.pausedAt??now));if(state.speaking)state.speaking.createdAt+=elapsed;if(state.game?.status==='playing')state.game.endsAt+=elapsed;if(state.movement)state.movement.startedAt+=elapsed;if(state.interaction)state.interaction.startedAt+=elapsed;state.nextFamilyAt+=elapsed;for(const [key,end]of rt.activeEvents)rt.activeEvents.set(key,end+elapsed);rt.lastCamera+=elapsed;rt.lastDecision+=elapsed;rt.lastEventCheck+=elapsed;rt.lastResponse+=elapsed;rt.pausedAt=undefined;}
+   if(!action.paused&&state.paused){const elapsed=Math.max(0,now-(rt.pausedAt??now));if(state.speaking)state.speaking.createdAt+=elapsed;if(state.game?.status==='playing')state.game.endsAt+=elapsed;if(state.movement)state.movement.startedAt+=elapsed;if(state.interaction)state.interaction.startedAt+=elapsed;if(state.irl)state.irl.startedAt+=elapsed;state.nextFamilyAt+=elapsed;for(const [key,end]of rt.activeEvents)rt.activeEvents.set(key,end+elapsed);rt.lastCamera+=elapsed;rt.lastDecision+=elapsed;rt.lastEventCheck+=elapsed;rt.lastResponse+=elapsed;rt.pausedAt=undefined;}
    state.paused=action.paused;logEvent(state,'system',action.paused?'Operação pausada.':'Operação retomada.',now);break;
   }
   case 'SETTINGS':{
@@ -323,12 +330,13 @@ export function tick(state:LiveState,now=Date.now(),dtMs=1000):void{
   state.room=state.movement.to;state.characters.homer.room=state.room;state.characters.homer.activity='idle';state.movement=null;
   state.cameraId=state.cameras.find(c=>c.room===state.room&&c.type==='wide')?.id??state.cameraId;rt.lastCamera=now;logEvent(state,'movement',`Homer chegou: ${ROOMS.find(r=>r.id===state.room)!.name}`,now);
  }
+ if(state.irl&&!state.interaction){const tour=state.irl;state.room=irlPose(now-tour.startedAt).room;state.characters.homer.room=state.room;if(now-tour.startedAt>=IRL_DURATION){state.room='living';state.characters.homer.room='living';if(tour.pendingDonuts){tour.pendingDonuts--;state.interaction={id:uid('donut',now),kind:'donut',startedAt:now,duration:DONUT_DURATION};tour.startedAt=now+DONUT_DURATION;}else if(!tour.enabled){state.irl=undefined;rt.lastCamera=now;}else tour.startedAt=now;}}
  if(state.interaction){state.room=donutPose(now-state.interaction.startedAt).room;state.characters.homer.room=state.room;}
  if(state.interaction&&now>=state.interaction.startedAt+state.interaction.duration){state.interaction=undefined;state.room='living';state.characters.homer.room='living';rt.lastCamera=now;state.homer.hunger=clamp(state.homer.hunger-15);logEvent(state,'object','Homer pegou a rosquinha e voltou ao seu lugar.',now);}
  if(state.speaking&&now>=state.speaking.createdAt+state.speaking.duration){const who=state.speaking.character;if(state.characters[who].activity==='talking')state.characters[who].activity=rt.speechActivity?.character===who?rt.speechActivity.activity:who==='homer'&&state.room!=='living'?'idle':'sitting';state.speaking=null;}
  if(!state.interaction&&!state.speaking&&state.speechQueue.length){
   const speech=state.speechQueue.shift()!;if(state.characters[speech.character].enabled){speech.createdAt=now;rt.speechActivity={character:speech.character,activity:state.characters[speech.character].activity};state.speaking=speech;if(!state.movement||speech.character!=='homer')state.characters[speech.character].activity='talking';
-   if(!state.interaction&&state.settings.autoCamera&&state.settings.mode!=='manual'&&!state.movement&&now-rt.lastCamera>8000){const room=state.characters[speech.character].room;const current=state.cameras.find(c=>c.id===state.cameraId);if(current?.room!==room||!['wide','frontal'].includes(current.type))state.cameraId=state.cameras.find(c=>c.room===room&&c.type==='frontal')?.id??state.cameraId;rt.lastCamera=now;}
+   if(!state.irl&&!state.interaction&&state.settings.autoCamera&&state.settings.mode!=='manual'&&!state.movement&&now-rt.lastCamera>8000){const room=state.characters[speech.character].room;const current=state.cameras.find(c=>c.id===state.cameraId);if(current?.room!==room||!['wide','frontal'].includes(current.type))state.cameraId=state.cameras.find(c=>c.room===room&&c.type==='frontal')?.id??state.cameraId;rt.lastCamera=now;}
   }
  }
  for(const [eventId,end]of rt.activeEvents){if(now>=end){rt.activeEvents.delete(eventId);if(eventId==='rain')state.weather='clear';if(eventId==='power'||eventId==='lights')state.power=true;if(eventId==='fridge')state.doors.fridge=false;if(eventId==='sleep'){state.characters.homer.activity='sitting';state.characters.homer.expression='neutral';}}}
@@ -341,11 +349,12 @@ export function tick(state:LiveState,now=Date.now(),dtMs=1000):void{
    else if(state.settings.mode==='semi'){state.proposals.push({id:uid('proposal',now),action,reason:'Atividade escolhida pela votação do público.'});state.proposals=state.proposals.slice(-8);}
   }
  }}
- if(state.settings.mode!=='manual'&&!state.interaction){
+ if(state.irl&&!state.interaction&&state.settings.mode!=='manual'&&state.settings.aiEnabled&&state.settings.provider==='demo')localResponse(state,now);
+ if(state.settings.mode!=='manual'&&!state.interaction&&!state.irl){
   if(state.settings.familyEnabled&&now>=state.nextFamilyAt&&!state.speaking&&!state.movement&&state.speechQueue.length<2)familyInteraction(state,now);
   if(state.settings.eventsEnabled&&now-rt.lastEventCheck>=30000){rt.lastEventCheck=now;const possible=state.events.filter(e=>!eventPossible(state,e,now));for(const event of possible.sort(()=>Math.random()-.5)){if(Math.random()<event.probability){triggerEvent(state,event,now);break;}}}
   if(state.settings.aiEnabled){if(state.settings.provider==='demo')localResponse(state,now);autonomousDecision(state,now);}
-  if(!state.interaction&&state.settings.autoCamera&&!state.movement&&!state.speaking&&now-rt.lastCamera>=state.settings.cameraInterval*1000){const candidates=state.cameras.filter(c=>c.room===state.room&&c.id!==state.cameraId&&c.type!=='first-person');if(candidates.length)state.cameraId=candidates[Math.floor(Math.random()*candidates.length)].id;rt.lastCamera=now;}
+  if(!state.irl&&!state.interaction&&state.settings.autoCamera&&!state.movement&&!state.speaking&&now-rt.lastCamera>=state.settings.cameraInterval*1000){const candidates=state.cameras.filter(c=>c.room===state.room&&c.id!==state.cameraId&&c.type!=='first-person');if(candidates.length)state.cameraId=candidates[Math.floor(Math.random()*candidates.length)].id;rt.lastCamera=now;}
  }
  if(now-rt.lastSummary>=300000){rt.lastSummary=now;const summary=`${new Date(now).toLocaleTimeString('pt-BR')}: ${ROOMS.find(r=>r.id===state.room)!.name}; humor ${Math.round(state.homer.mood)}; ${state.logs.slice(0,3).map(l=>l.message).join(' / ')}`;state.memory.push(summary);state.memory=state.memory.slice(-30);}
  state.version++;
