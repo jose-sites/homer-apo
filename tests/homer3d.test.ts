@@ -69,3 +69,11 @@ test('Real GLB rig reaches the donut and mouth without stretching arm bones',asy
  const p=donutPose(8000).position;assert.ok(Math.hypot(p[0]+5,p[2]+2.4)>1.5);assert.ok(Math.hypot(p[0]+5,p[2]+2.4)<3);
  assert.equal(donutCamera(7999)?.id,'eyes');assert.equal(donutCamera(8000)?.id,'door');assert.equal(donutCamera(18000)?.id,'kitchen');assert.equal(donutCamera(37000),null);
  });
+
+test('Queued replies wait until the kitchen sequence finishes',()=>{
+ const s=createInitialState(),now=Date.now();s.settings.mode='manual';
+ applyAction(s,{type:'INTERACT_WITH_OBJECT',object:'donut'},now);
+ applyAction(s,{type:'TALK',character:'homer',text:'Salve para quem chegou!'},now+1);
+ tick(s,now+20000,0);assert.equal(s.speaking,null);assert.equal(s.speechQueue.length,1);
+ tick(s,now+38001,0);assert.equal((s.speaking as {text:string}|null)?.text,'Salve para quem chegou!');assert.equal(s.speechQueue.length,0);
+});

@@ -326,7 +326,7 @@ export function tick(state:LiveState,now=Date.now(),dtMs=1000):void{
  if(state.interaction){state.room=donutPose(now-state.interaction.startedAt).room;state.characters.homer.room=state.room;}
  if(state.interaction&&now>=state.interaction.startedAt+state.interaction.duration){state.interaction=undefined;state.room='living';state.characters.homer.room='living';rt.lastCamera=now;state.homer.hunger=clamp(state.homer.hunger-15);logEvent(state,'object','Homer pegou a rosquinha e voltou ao seu lugar.',now);}
  if(state.speaking&&now>=state.speaking.createdAt+state.speaking.duration){const who=state.speaking.character;if(state.characters[who].activity==='talking')state.characters[who].activity=rt.speechActivity?.character===who?rt.speechActivity.activity:who==='homer'&&state.room!=='living'?'idle':'sitting';state.speaking=null;}
- if(!state.speaking&&state.speechQueue.length){
+ if(!state.interaction&&!state.speaking&&state.speechQueue.length){
   const speech=state.speechQueue.shift()!;if(state.characters[speech.character].enabled){speech.createdAt=now;rt.speechActivity={character:speech.character,activity:state.characters[speech.character].activity};state.speaking=speech;if(!state.movement||speech.character!=='homer')state.characters[speech.character].activity='talking';
    if(!state.interaction&&state.settings.autoCamera&&state.settings.mode!=='manual'&&!state.movement&&now-rt.lastCamera>8000){const room=state.characters[speech.character].room;const current=state.cameras.find(c=>c.id===state.cameraId);if(current?.room!==room||!['wide','frontal'].includes(current.type))state.cameraId=state.cameras.find(c=>c.room===room&&c.type==='frontal')?.id??state.cameraId;rt.lastCamera=now;}
   }

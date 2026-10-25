@@ -305,7 +305,7 @@ export function createServer(options: ServerOptions = {}) {
         tick(state, now, elapsed);
         if (!state.paused && !state.interaction && state.settings.mode !== 'manual' && state.settings.aiEnabled && state.settings.provider === 'openai-compatible' && !aiBusy && now - lastAIAt >= state.settings.responseCooldown * 1000) {
           const selected = state.chat.filter(m => m.selected && !processedMessages.has(m.id)).sort((a,b)=>(b.priority||0)-(a.priority||0))[0];
-          if (selected) { processedMessages.add(selected.id); void respond(selected.id, true).catch(() => undefined); }
+          if (selected) { void respond(selected.id, true).catch(() => undefined); }
           else if (shouldComment(state, now, lastAIAt, boot)) void respond(undefined, true).catch(() => undefined);
         }
         if (processedMessages.size > 200) { const current = new Set(state.chat.map(m => m.id)); for (const id of processedMessages) if (!current.has(id)) processedMessages.delete(id); }
