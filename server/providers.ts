@@ -1,4 +1,4 @@
-import {irlPose} from '../shared/irl';
+import {tourPose} from '../shared/irl';
 import {ttsOrder,configured,configurationWarnings,numeric} from './config.ts';
 import { createHash } from 'node:crypto';
 import { mkdir, readdir, readFile, stat, unlink, writeFile, rename } from 'node:fs/promises';
@@ -55,7 +55,7 @@ export function parseModelActions(content: string): unknown[] {
 export async function generateActions(state: LiveState, message: string, env: ProviderEnvironment, fetchImpl: typeof fetch = fetch, signal?: AbortSignal): Promise<unknown[]> {
   const key = env.AI_API_KEY || env.OPENAI_API_KEY;
   if (!key) throw new ProviderError('IA externa não configurada. Use o modo demonstração ou configure AI_API_KEY no servidor.', 503);
-  const context = { irl:state.irl?{...irlPose(Date.now()-state.irl.startedAt),activity:'passeio com selfie',nearby:state.room==='kitchen'?['mesa','geladeira','fogão']:['sofá','TV']}:null, room: state.room, mood: state.homer, recentEvents: state.logs.slice(0,6).map(x => x.message), memory: state.memory.slice(-10), rooms: [...new Set(state.cameras.map(c => c.room))], cameras: state.cameras.map(c => ({ id: c.id, room: c.room })), family: Object.values(state.characters).filter(c => c.enabled).map(c => c.id) };
+  const context = { irl:state.irl?{...tourPose(Date.now()-state.irl.startedAt,state.irl.plan),activity:'passeio com selfie',nearby:({living:['sofá','TV'],kitchen:['mesa','geladeira','fogão'],dining:['mesa de jantar'],hall:['escada'],upstairs:['portas dos quartos','escada'],parents:['cama'],bart:['cama','escrivaninha'],lisa:['livros','cama'],maggie:['berço'],bathroom:['pia','banheira'],wc:['pia'],garage:['carro'],yard:['jardim','churrasqueira'],front:['fachada','calçada'],basement:['escada','caixas'],attic:['caixas','telhado']} as Record<string,string[]>)[state.room]||[]}:null, room: state.room, mood: state.homer, recentEvents: state.logs.slice(0,6).map(x => x.message), memory: state.memory.slice(-10), rooms: [...new Set(state.cameras.map(c => c.room))], cameras: state.cameras.map(c => ({ id: c.id, room: c.room })), family: Object.values(state.characters).filter(c => c.enabled).map(c => c.id) };
   let response: Response;
   try {
     response = await fetchImpl(endpoint(env.AI_BASE_URL || env.OPENAI_BASE_URL, '/chat/completions'), {

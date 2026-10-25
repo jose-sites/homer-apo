@@ -1,4 +1,4 @@
-import {irlPose,IRL_DURATION} from './irl';
+import {tourPose,makeIRLPlan,IRL_DURATION} from './irl';
 import {DONUT_DURATION,donutPose} from './homerMotion';
 import {LAYOUT_REVISION,STAIR_BOTTOM,STAIR_TOP} from './referenceLayout';
 import { z } from 'zod';
@@ -211,7 +211,7 @@ export function applyAction(state:LiveState,value:unknown,now=Date.now()):{ok:bo
  const rt=runtime(state,now);
  let result:{ok:boolean;error?:string}={ok:true};
  switch(action.type){
-  case 'IRL':if(state.interaction||state.movement)return {ok:false,error:'Aguarde a animação atual.'};if(action.enabled){if(state.room!=='living')return {ok:false,error:'Inicie na sala.'};state.irl??={enabled:true,startedAt:now,pendingDonuts:0};state.irl.enabled=true;state.doors['kitchen-living']=true;}else if(state.irl)state.irl.enabled=false;break;
+  case 'IRL':if(state.interaction||state.movement)return {ok:false,error:'Aguarde a animação atual.'};if(action.enabled){if(state.room!=='living')return {ok:false,error:'Inicie na sala.'};state.irl??={enabled:true,startedAt:now,pendingDonuts:0};state.irl.enabled=true;prepareIRLTour(state);}else if(state.irl)state.irl.enabled=false;break;
   case 'TALK':result=say(state,action.character,action.text,now,action.priority??5);break;
   case 'REACT':state.characters[action.character].expression=action.expression;break;
   case 'CHANGE_CAMERA':if(!state.cameras.some(c=>c.id===action.cameraId))return {ok:false,error:'Câmera inexistente.'};state.cameraId=action.cameraId;rt.lastCamera=now;break;
@@ -330,7 +330,7 @@ export function tick(state:LiveState,now=Date.now(),dtMs=1000):void{
   state.room=state.movement.to;state.characters.homer.room=state.room;state.characters.homer.activity='idle';state.movement=null;
   state.cameraId=state.cameras.find(c=>c.room===state.room&&c.type==='wide')?.id??state.cameraId;rt.lastCamera=now;logEvent(state,'movement',`Homer chegou: ${ROOMS.find(r=>r.id===state.room)!.name}`,now);
  }
- if(state.irl&&!state.interaction){const tour=state.irl;state.room=irlPose(now-tour.startedAt).room;state.characters.homer.room=state.room;if(now-tour.startedAt>=IRL_DURATION){state.room='living';state.characters.homer.room='living';if(tour.pendingDonuts){tour.pendingDonuts--;state.interaction={id:uid('donut',now),kind:'donut',startedAt:now,duration:DONUT_DURATION};tour.startedAt=now+DONUT_DURATION;}else if(!tour.enabled){state.irl=undefined;rt.lastCamera=now;}else tour.startedAt=now;}}
+ if(state.irl&&!state.interaction){const tour=state.irl;state.room=tourPose(now-tour.startedAt,tour.plan).room;state.characters.homer.room=state.room;if(now-tour.startedAt>=(tour.plan?.duration||IRL_DURATION)){state.room='living';state.characters.homer.room='living';if(tour.pendingDonuts){tour.pendingDonuts--;state.interaction={id:uid('donut',now),kind:'donut',startedAt:now,duration:DONUT_DURATION};tour.startedAt=now+DONUT_DURATION;}else if(!tour.enabled){state.irl=undefined;rt.lastCamera=now;}else {tour.startedAt=now;tour.stopIndex=(tour.stopIndex||0)+1;prepareIRLTour(state);}}}
  if(state.interaction){state.room=donutPose(now-state.interaction.startedAt).room;state.characters.homer.room=state.room;}
  if(state.interaction&&now>=state.interaction.startedAt+state.interaction.duration){state.interaction=undefined;state.room='living';state.characters.homer.room='living';rt.lastCamera=now;state.homer.hunger=clamp(state.homer.hunger-15);logEvent(state,'object','Homer pegou a rosquinha e voltou ao seu lugar.',now);}
  if(state.speaking&&now>=state.speaking.createdAt+state.speaking.duration){const who=state.speaking.character;if(state.characters[who].activity==='talking')state.characters[who].activity=rt.speechActivity?.character===who?rt.speechActivity.activity:who==='homer'&&state.room!=='living'?'idle':'sitting';state.speaking=null;}
@@ -358,4 +358,12 @@ export function tick(state:LiveState,now=Date.now(),dtMs=1000):void{
  }
  if(now-rt.lastSummary>=300000){rt.lastSummary=now;const summary=`${new Date(now).toLocaleTimeString('pt-BR')}: ${ROOMS.find(r=>r.id===state.room)!.name}; humor ${Math.round(state.homer.mood)}; ${state.logs.slice(0,3).map(l=>l.message).join(' / ')}`;state.memory.push(summary);state.memory=state.memory.slice(-30);}
  state.version++;
+}
+
+/** Each excursion starts and ends at the existing presenter mark, retaining safe gift handoff. */
+function prepareIRLTour(state:LiveState){
+ const tour=state.irl!;const stops=ROOMS.filter(r=>r.id!=='living');const destination=stops[(tour.stopIndex||0)%stops.length].id;
+ const route=movementWaypoints('living',destination);if(!route)return;
+ tour.plan=makeIRLPlan([[-.1,0,1.5],[1.65,0,1.5],[3.7,0,1.8],...route],destination);
+ const rooms=findRoomPath('living',destination)!;for(let i=1;i<rooms.length;i++){const id=doorId(rooms[i-1],rooms[i]);if(DOORWAYS[id])state.doors[id]=true;}
 }

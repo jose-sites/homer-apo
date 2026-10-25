@@ -1,4 +1,4 @@
-import {irlPose} from '../../shared/irl';
+import {tourPose} from '../../shared/irl';
 import {IdleDirector,canIdle,idlePose} from './homerIdle';
 import {useEffect,useMemo,useRef} from 'react';
 import {useGLTF} from '@react-three/drei';
@@ -23,7 +23,7 @@ export function Homer3D({state}:{state:LiveState}){
   if(!root.current||state.paused)return;idleTime.current+=dt;dt=Math.min(dt,.08);clock.current+=dt;const t=clock.current;
   let walking=false,direction:Vec3=[0,0,1];const elapsed=state.interaction?Date.now()-state.interaction.startedAt:0;const gesture=donutGesture(elapsed);let donut=state.interaction?donutPose(elapsed):null;
   if(donut){position.current.set(...donut.position);walking=donut.walking;direction=donut.direction;lastInteraction.current=state.interaction!.id;}
-  else if(state.irl){const p=irlPose(Date.now()-state.irl.startedAt);position.current.set(...p.position);walking=p.walking;direction=p.direction;}
+  else if(state.irl){const p=tourPose(Date.now()-state.irl.startedAt,state.irl.plan);position.current.set(...p.position);walking=p.walking;direction=p.direction;}
   else if(lastInteraction.current){position.current.set(...HOMER_HOME);lastInteraction.current=undefined;}
   if(state.movement){if(!previousMove.current){path.current=[position.current.toArray()as Vec3,...state.movement.path,state.movement.to==='living'?HOMER_HOME:ROOM_NAV_POINTS[state.movement.to]];}const p=pointAlong(path.current,(Date.now()-state.movement.startedAt)/state.movement.duration);position.current.set(...p.position);direction=p.direction;walking=true;}
   else if(previousMove.current&&path.current.length)position.current.set(...path.current.at(-1)!);
