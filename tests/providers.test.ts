@@ -41,7 +41,7 @@ test('Fish missing credentials and HTTP failures remain recoverable and never ca
 });
 test('AI receives recent memory and Brazilian conversational instructions',async()=>{
  const state=createInitialState();state.memory=['Homer conversou sobre futebol.'];
- await generateActions(state,'E o jogo?',{AI_API_KEY:'secret'},async(_url,init)=>{const body=JSON.parse(String(init!.body));assert.match(body.messages[0].content,/português brasileiro/);assert.match(body.messages[0].content,/futebol/);assert.equal(body.messages[1].content,'E o jogo?');return Response.json({choices:[{message:{content:'{"actions":[{"type":"TALK","character":"homer","text":"Que jogo!"}]}'}}]})});
+ await generateActions(state,'E o jogo?',{AI_API_KEY:'secret'},async(_url,init)=>{const body=JSON.parse(String(init!.body));assert.match(body.messages[0].content,/português brasileiro/);assert.match(body.messages[0].content,/futebol/);assert.match(body.messages[0].content,/priorize respostas corretas/);assert.match(body.messages[0].content,/Duff/);assert.match(body.messages[0].content,/sem narrar gestos/);assert.equal(body.messages[1].content,'E o jogo?');return Response.json({choices:[{message:{content:'{"actions":[{"type":"TALK","character":"homer","text":"Que jogo!"}]}'}}]})});
 
 });
 test('Idle commentary respects quiet interval, manual/semi, pause and disabled Homer',()=>{

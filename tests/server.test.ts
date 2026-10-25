@@ -183,3 +183,19 @@ test('TikTok routes authenticate, accept offline demo and require explicit end c
   assert.equal(f.server.state.paused,true);
  } finally {await f.close();}
 });
+
+test('An in-flight idle remark yields to a donut gift before queuing voice',async()=>{
+ let finish:((r:Response)=>void)|undefined;const realNow=Date.now;
+ let f:Awaited<ReturnType<typeof fixture>>;
+ // Age only server startup; live timers and the actual request use the real clock.
+ Date.now=()=>realNow()-300000;
+ try{f=await fixture({tickInterval:10,env:{AI_API_KEY:'test-only'},fetchImpl:async()=>new Promise<Response>(resolve=>{finish=resolve})});}finally{Date.now=realNow;}
+ try{
+  Object.assign(f.server.state.settings,{mode:'auto',provider:'openai-compatible',eventsEnabled:false,familyEnabled:false});
+  await waitUntil(()=>!!finish);
+  assert.equal((await post(`${f.url}/api/action`,{type:'INTERACT_WITH_OBJECT',object:'donut'})).status,200);
+  finish!(Response.json({choices:[{message:{content:JSON.stringify({actions:[{type:'TALK',character:'homer',text:'Comentário que deve ceder prioridade.'}]})}}]}));
+  await waitUntil(()=>f.server.state.logs.some(l=>l.message.includes('uma interação recebeu prioridade')));
+  assert.ok(f.server.state.interaction);assert.equal(f.server.state.speechQueue.length,0);assert.equal(f.server.state.speaking,null);
+ }finally{await f.close();}
+});

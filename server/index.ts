@@ -216,7 +216,9 @@ export function createServer(options: ServerOptions = {}) {
     if (closed || automatic && state.settings.mode === 'manual') throw new ProviderError('Resposta automática cancelada pelo operador.', 409);
     if (state.paused) throw new ProviderError('Retome a operação antes de solicitar uma fala.', 409);
     if (!state.settings.aiEnabled) throw new ProviderError('Ative a IA no painel antes de solicitar uma resposta.', 409);
-    const message = messageId ? state.chat.find(m => m.id === messageId) : [...state.chat].reverse().find(m=>m.selected);
+    const spontaneous=automatic&&!messageId;
+    const chatAtRequest=state.chat.at(-1)?.id;
+    const message = spontaneous ? undefined : messageId ? state.chat.find(m => m.id === messageId) : [...state.chat].reverse().find(m=>m.selected);
     if (messageId && !message) throw new ProviderError('Mensagem não encontrada.', 404);
     if (Date.now() - lastAIAt < state.settings.responseCooldown * 1000) throw new ProviderError('Aguarde o intervalo configurado entre respostas.', 429);
     aiBusy = true;
@@ -225,8 +227,14 @@ export function createServer(options: ServerOptions = {}) {
     lastAIAt = Date.now();
     try {
       const prompt = message?.text || 'O chat está quieto. Faça um comentário espontâneo breve sobre seu estado ou o que aconteceu recentemente, sem repetir a última fala.';
-      const actions = provider === 'demo' ? [localReply(prompt)] : await generateActions(state, prompt, env, options.fetchImpl, shutdown.signal);
+      let actions = provider === 'demo' ? [localReply(prompt)] : await generateActions(state, prompt, env, options.fetchImpl, shutdown.signal);
       if (closed || generation !== aiGeneration || state.paused || !state.settings.aiEnabled || automatic && state.settings.mode === 'manual') throw new ProviderError('Resposta descartada: a operação ou configuração da IA mudou durante a requisição.', 409);
+      if(spontaneous){
+        if(state.interaction||state.movement||state.speaking||state.speechQueue.length||state.chat.at(-1)?.id!==chatAtRequest)throw new ProviderError('Comentário espontâneo descartado: uma interação recebeu prioridade.',409);
+        actions=actions.filter((a:any)=>a.type==='TALK').slice(0,1);
+        const line=String((actions[0]as {text?:string})?.text||'').trim().toLocaleLowerCase('pt-BR');
+        if(!line||state.memory.slice(-10).some(m=>m.toLocaleLowerCase('pt-BR').includes(line)))throw new ProviderError('Comentário espontâneo repetido descartado sem gerar voz.',409);
+      }
       // Validate an entire response against a clone before any real mutations.
       const preview = structuredClone(state);
       for (const action of actions) {
@@ -295,7 +303,7 @@ export function createServer(options: ServerOptions = {}) {
       const now = Date.now(); const elapsed = Math.min(5000, now - lastTick); lastTick = now;
       try {
         tick(state, now, elapsed);
-        if (!state.paused && state.settings.mode !== 'manual' && state.settings.aiEnabled && state.settings.provider === 'openai-compatible' && !aiBusy && now - lastAIAt >= state.settings.responseCooldown * 1000) {
+        if (!state.paused && !state.interaction && state.settings.mode !== 'manual' && state.settings.aiEnabled && state.settings.provider === 'openai-compatible' && !aiBusy && now - lastAIAt >= state.settings.responseCooldown * 1000) {
           const selected = state.chat.filter(m => m.selected && !processedMessages.has(m.id)).sort((a,b)=>(b.priority||0)-(a.priority||0))[0];
           if (selected) { processedMessages.add(selected.id); void respond(selected.id, true).catch(() => undefined); }
           else if (shouldComment(state, now, lastAIAt, boot)) void respond(undefined, true).catch(() => undefined);

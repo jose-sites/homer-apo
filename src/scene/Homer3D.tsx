@@ -1,3 +1,4 @@
+import {IdleDirector,canIdle,idlePose} from './homerIdle';
 import {useEffect,useMemo,useRef} from 'react';
 import {useGLTF} from '@react-three/drei';
 import {useFrame} from '@react-three/fiber';
@@ -15,9 +16,10 @@ export function Homer3D({state}:{state:LiveState}){
  const root=useRef<Group>(null),held=useRef<Group>(null);const clock=useRef(0),walkingTime=useRef(0),speaking=useRef<Speech|null>(null),talkBlend=useRef(0),previousMove=useRef(false),path=useRef<Vec3[]>([]),lastInteraction=useRef<string|undefined>(undefined);
  const position=useRef(new Vector3(...(state.room==='living'?HOMER_HOME:ROOM_NAV_POINTS[state.room])));
  useEffect(()=>{rig.mixer.clipAction(asset.animations[0]).play();const handle=(event:Event)=>{const {speech,active}=(event as CustomEvent<{speech:Speech;active:boolean}>).detail;if(speech.character==='homer')speaking.current=active?speech:null;};window.addEventListener('homer:playback',handle);return()=>{window.removeEventListener('homer:playback',handle);rig.mixer.stopAllAction();rig.mixer.uncacheRoot(rig.scene)}},[rig,asset]);
+ const idle=useRef(new IdleDirector());const idleTime=useRef(0);
  const bone=rig.bone;
  useFrame(({camera,gl},dt)=>{
-  if(!root.current||state.paused)return;dt=Math.min(dt,.08);clock.current+=dt;const t=clock.current;
+  if(!root.current||state.paused)return;idleTime.current+=dt;dt=Math.min(dt,.08);clock.current+=dt;const t=clock.current;
   let walking=false,direction:Vec3=[0,0,1];const elapsed=state.interaction?Date.now()-state.interaction.startedAt:0;const gesture=donutGesture(elapsed);let donut=state.interaction?donutPose(elapsed):null;
   if(donut){position.current.set(...donut.position);walking=donut.walking;direction=donut.direction;lastInteraction.current=state.interaction!.id;}
   else if(lastInteraction.current){position.current.set(...HOMER_HOME);lastInteraction.current=undefined;}
@@ -40,8 +42,12 @@ export function Homer3D({state}:{state:LiveState}){
    if(state.characters.homer.expression==='confused'){add('DEF-head',0,0,.12);add('DEF-arm.L',.3)}
    if(state.characters.homer.expression==='happy')add('DEF-head',0,0,Math.sin(t*2)*.03);
   }
+  const idleFrame=idle.current.sample(idleTime.current,canIdle(state,!!speaking.current));
+  const idleMotion=idleFrame?idlePose(idleFrame.kind,idleFrame.progress):null;
+  if(idleMotion){const q=idleMotion;add('DEF-head',0,q.headYaw,q.headTilt*q.weight);add('DEF-chest',q.chest*q.weight,0,q.chest*q.weight);add('DEF-humerus.R',q.shoulder*q.weight,0,-q.shoulder*q.weight);add('DEF-humerus.L',q.shoulder*q.weight,0,q.shoulder*q.weight);add('DEF-arm.R',q.shoulder*q.weight);add('DEF-arm.L',q.shoulder*q.weight);}
   root.current.updateMatrixWorld(true);
   const hand=bone('DEF-hand-middle1.R');
+  if(idleMotion?.hand&&hand){const rest=hand.getWorldPosition(new Vector3()),aim=root.current.localToWorld(new Vector3(...idleMotion.hand));aim.lerpVectors(rest,aim,idleMotion.weight);reachWithArm(root.current,hand,['DEF-arm.R','DEF-humerus.R'].map(bone).filter((b):b is Bone=>!!b),aim);}
   if(donut&&gesture.weight>0&&hand){
    const hips=bone('DEF-hips');if(hips){const axis=new Vector3(1,0,0).applyQuaternion(root.current.quaternion);rotateBoneInWorld(hips,new Quaternion().setFromAxisAngle(axis,gesture.lean));root.current.updateMatrixWorld(true);}
    const restHand=hand.getWorldPosition(new Vector3());
@@ -53,7 +59,7 @@ export function Homer3D({state}:{state:LiveState}){
   }
   if(held.current){held.current.visible=Boolean(donut?.held)&&state.characters.homer.enabled;if(hand&&donut?.held){root.current.updateMatrixWorld(true);held.current.position.lerpVectors(new Vector3(...DONUT_SPOT),hand.getWorldPosition(new Vector3()),MathUtils.smoothstep(elapsed,DONUT_TIMES.pickup,DONUT_TIMES.pickup+300));held.current.quaternion.copy(root.current.quaternion).multiply(new Quaternion().setFromAxisAngle(new Vector3(1,0,0),gesture.carry*Math.PI/2));held.current.scale.setScalar(gesture.scale);}}
   // Moving character shadows must not remain at the initial position.
-  if(walking||donut||w>.01)gl.shadowMap.needsUpdate=true;
+  if(walking||donut||idleMotion||w>.01)gl.shadowMap.needsUpdate=true;
  });
  return <><group ref={root} position={position.current} name="homer-3d" visible={state.characters.homer.enabled}><group position={rig.offset} scale={rig.scale}><primitive object={rig.scene}/></group><mesh rotation={[-Math.PI/2,0,0]} position={[0,.012,0]}><circleGeometry args={[.36,32]}/><meshBasicMaterial color="#332633" transparent opacity={.17} depthWrite={false}/></mesh></group><group ref={held} visible={false} name="held-donut"><Donut scale={.8}/></group></>;
 }
