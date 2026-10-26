@@ -1,3 +1,4 @@
+import {providerFailure} from './providerErrors.ts';
 import {UsageLimitError,type UsageKind} from './usage.ts';
 import type {ViewerMemory} from './viewerMemory.ts';
 import {CAPABILITIES,environmentContext,recentConversation} from './brain.ts';
@@ -43,6 +44,11 @@ async function readLimited(response: Response, limit: number): Promise<Buffer> {
   return Buffer.concat(chunks, total);
 }
 
+async function providerHttpError(provider:string,response:Response){
+ let payload:unknown;try{payload=JSON.parse((await readLimited(response,16000)).toString('utf8'))}catch{}
+ return new ProviderError(providerFailure(provider,response.status,payload),response.status===429?429:502);
+}
+
 /** Provider output is data: only the engine's allowlisted actions can run. */
 export function parseModelActions(content: string): unknown[] {
   let value: unknown;
@@ -70,7 +76,7 @@ export async function generateActions(state: LiveState, message: string, env: Pr
       ] }),
     });
   } catch { throw new ProviderError('O provedor de IA não respondeu dentro do prazo. O motor local continua funcionando.'); }
-  if (!response.ok) throw new ProviderError(`O provedor de IA retornou HTTP ${response.status}. Confira a configuração no servidor.`);
+  if (!response.ok) throw await providerHttpError('IA',response);
   const body = (await readLimited(response, 128_000)).toString('utf8');
   let result: { choices?: Array<{ message?: { content?: string } }> };
   try { result = JSON.parse(body); } catch { throw new ProviderError('Resposta HTTP inválida do provedor de IA.'); }
@@ -124,7 +130,7 @@ export class AudioProvider {
       let response: Response;
       try { response = await this.fetchImpl(url, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${key}`, ...(fish ? { model } : {}) }, signal: this.shutdownSignal ? AbortSignal.any([this.shutdownSignal, AbortSignal.timeout(numeric(this.env,'TTS_TIMEOUT_MS',10000,100,30000))]) : AbortSignal.timeout(numeric(this.env,'TTS_TIMEOUT_MS',10000,100,30000)), body: JSON.stringify(fish ? {text, format:'mp3', ...(speed!==1?{prosody:{speed}}:{}), ...(voice ? {reference_id:voice} : {})} : { model, input: text, voice, response_format: 'mp3', speed }) }); }
       catch { throw new ProviderError('O provedor de voz não respondeu. A fala permanece nas legendas.'); }
-      if (!response.ok) throw new ProviderError(`O provedor de voz retornou HTTP ${response.status}.`);
+      if (!response.ok) throw await providerHttpError(fish?'Fish Audio':'OpenAI TTS',response);
       const contentType = response.headers.get('content-type') || '';
       if (!contentType.startsWith('audio/') && !contentType.startsWith('application/octet-stream')) throw new ProviderError('O provedor de voz não retornou áudio.');
       const buffer = await readLimited(response, 8 * 1024 * 1024);

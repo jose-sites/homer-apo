@@ -1,6 +1,6 @@
 import {UsageMeter,UsageLimitError} from './usage.ts';
 import {feeling} from '../shared/mood.ts';
-import {liveRequirements,activateLiveConversation} from './liveStartup.ts';
+import {liveRequirements,activateLiveConversation,selectConfiguredProviders} from './liveStartup.ts';
 import {validateDecision,isQueuedAction,rememberExchange} from './brain.ts';
 import {TikTokBridge,GIFTS} from './tiktok';
 import {loadEnvironment,configurationWarnings} from './config.ts';
@@ -87,6 +87,7 @@ export function createServer(options: ServerOptions = {}) {
   const dataDir = resolve(options.dataDir || env.DATA_DIR || 'data');
   const db = new StateDatabase(options.databasePath || join(dataDir, 'homer.sqlite'));
   const state = recoverState(db.load(), createInitialState());
+  selectConfiguredProviders(state,env);
   const usage=new UsageMeter(db.loadUsage(),()=>state.settings,u=>db.saveUsage(u));
   const shutdown = new AbortController();
   const audio = new AudioProvider(join(dataDir, 'audio-cache'), env, options.fetchImpl, shutdown.signal, message=>{ttsStatus=message;event('audio',message);broadcast();},(kind,characters)=>usage.reserve(kind,characters));

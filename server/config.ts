@@ -6,7 +6,7 @@ export function loadEnvironment(directory=process.cwd(), inherited:Env=process.e
  const files:Env={};for(const name of ['.env','.env.local']){const p=resolve(directory,name);if(existsSync(p))Object.assign(files,parseEnv(readFileSync(p,'utf8')))}
  return {...files,...inherited};
 }
-export function ttsOrder(env:Env):string[]{return [...new Set([env.TTS_PRIMARY||env.TTS_PROVIDER||'openai',env.TTS_SECONDARY||'none'])].filter(x=>x!=='none')}
+export function ttsOrder(env:Env):string[]{return [...new Set([env.TTS_PRIMARY||env.TTS_PROVIDER||(env.FISH_API_KEY?'fish':'openai'),env.TTS_SECONDARY||'none'])].filter(x=>x!=='none')}
 export function configured(env:Env,p:string){return p==='fish'?!!env.FISH_API_KEY:p==='openai'?!!(env.TTS_API_KEY||env.OPENAI_API_KEY):false}
 export function configurationWarnings(env:Env):string[]{
  const warnings:string[]=[];

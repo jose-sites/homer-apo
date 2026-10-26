@@ -16,3 +16,10 @@ export function activateLiveConversation(state:LiveState){
  applyAction(state,{type:'SETTINGS',settings:{mode:'auto',aiEnabled:true,provider:'openai-compatible',ttsProvider:'openai-compatible'}});
  applyAction(state,{type:'PAUSE',paused:false});
 }
+
+/** Credentials select actual providers even when an old SQLite snapshot saved demo mode. */
+export function selectConfiguredProviders(state:LiveState,env:Env){
+ if(env.HOMER_DEMO==='true')return;
+ if(env.AI_API_KEY?.trim()||env.OPENAI_API_KEY?.trim())state.settings.provider='openai-compatible';
+ if(state.settings.ttsProvider!=='silent'&&(env.FISH_API_KEY?.trim()||env.TTS_API_KEY?.trim()||env.OPENAI_API_KEY?.trim()))state.settings.ttsProvider='openai-compatible';
+}

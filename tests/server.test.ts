@@ -242,3 +242,14 @@ test('live diagnostics and consumption controls report real state and block paid
  assert.equal((await fetch(`${f.url}/api/viewer-memory?key=${'a'.repeat(64)}`,{method:'DELETE'})).status,200);assert.equal(f.server.state.memory.length,0);assert.equal(f.server.state.conversations.length,0);
  }finally{await f.close()}
 });
+
+test('configured key routes local questions to external AI without manually changing saved demo provider',async()=>{
+ let calls=0;const f=await fixture({env:{OPENAI_API_KEY:'mock-only'},fetchImpl:async(_url,init)=>{calls++;const body=JSON.parse(String(init?.body));assert.equal(body.messages.at(-1).content,'voce ta bem homer?');return Response.json({choices:[{message:{content:JSON.stringify({actions:[{type:'TALK',character:'homer',text:'Tô bem! Hoje consegui descansar sem ninguém me chamar. E você?'}]})}}]})}});
+ try{await post(`${f.url}/api/action`,{type:'CHAT',user:'Operador',text:'voce ta bem homer?',source:'local'});const messageId=f.server.state.chat.at(-1)!.id;
+ const r=await post(`${f.url}/api/ai/respond`,{messageId});assert.equal(r.status,200);assert.equal((await r.json()).source,'openai-compatible');assert.equal(calls,1);assert.match(f.server.state.speechQueue[0].text,/Tô bem/);assert.doesNotMatch(f.server.state.speechQueue[0].text,/pensar dá fome/);
+ }finally{await f.close()}
+});
+test('OpenAI quota error is explicit and never becomes a canned Homer reply',async()=>{
+ const f=await fixture({env:{OPENAI_API_KEY:'mock-only'},fetchImpl:async()=>Response.json({error:{type:'insufficient_quota',code:'insufficient_quota',message:'secret-not-for-client'}},{status:429})});
+ try{const r=await post(`${f.url}/api/ai/respond`,{});assert.equal(r.status,429);const body=await r.json();assert.match(body.error,/Quota\/créditos/);assert.doesNotMatch(body.error,/secret/);assert.equal(f.server.state.speechQueue.length,0)}finally{await f.close()}
+});
