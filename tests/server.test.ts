@@ -202,3 +202,18 @@ test('An in-flight idle remark yields to a donut gift before queuing voice',asyn
 });
 
 test('Playback lease keeps speech alive through TTS generation and releases on end',async()=>{const f=await fixture();try{await post(`${f.url}/api/action`,{type:'TALK',character:'homer',text:'Olá!'});tick(f.server.state,Date.now(),0);const speech=f.server.state.speaking!;assert.ok(speech);const original=speech.duration;assert.equal((await post(`${f.url}/api/playback`,{speechId:speech.id,active:true})).status,200);assert.ok(speech.duration>=10000&&speech.duration>original);await post(`${f.url}/api/playback`,{speechId:'wrong',active:false});assert.ok(speech.duration>=10000);await post(`${f.url}/api/playback`,{speechId:speech.id,active:false});tick(f.server.state,Date.now()+1,0);assert.equal(f.server.state.speaking,null);}finally{await f.close();}});
+
+test('semantic local requests bypass keyword demo and queue validated action plans',async()=>{
+ const f=await fixture({env:{AI_API_KEY:'mock-only'},fetchImpl:async()=>Response.json({choices:[{message:{content:JSON.stringify({actions:[{type:'TALK',character:'homer',text:'Vou buscar uma água.'},{type:'INTERACT_WITH_OBJECT',object:'water'}]})}}]})});
+ try{
+ await post(`${f.url}/api/action`,{type:'SETTINGS',settings:{provider:'openai-compatible',mode:'auto'}});
+ await post(`${f.url}/api/action`,{type:'CHAT',user:'ana',text:'beba agua',source:'test'});
+ assert.equal(f.server.state.operatorQueue?.length||0,0);
+ const message=f.server.state.chat.at(-1)!;
+ const response=await post(`${f.url}/api/ai/respond`,{messageId:message.id});assert.equal(response.status,200);
+ assert.deepEqual(f.server.state.operatorQueue,[{type:'INTERACT_WITH_OBJECT',object:'water'}]);
+ assert.equal(f.server.state.interaction,undefined);
+ assert.equal(f.server.state.conversations?.[0].participant,'test:ana');
+ assert.equal(f.server.state.speechQueue[0].replyTo?.id,message.id);
+ }finally{await f.close()}
+});

@@ -1,4 +1,4 @@
-import {operatorIntent} from '../shared/operatorIntent';
+import {validateDecision,isQueuedAction,rememberExchange} from './brain.ts';
 import {TikTokBridge,GIFTS} from './tiktok';
 import {loadEnvironment,configurationWarnings} from './config.ts';
 import {ROOMS} from '../shared/data';
@@ -12,7 +12,7 @@ import { existsSync } from 'node:fs';
 import { WebSocketServer, WebSocket } from 'ws';
 import { z } from 'zod';
 import { createInitialState, applyAction, tick } from '../shared/engine.ts';
-import type { LiveState } from '../shared/types.ts';
+import type { Action, LiveState } from '../shared/types.ts';
 import { StateDatabase } from './db.ts';
 import { AudioProvider, shouldComment, generateActions, localReply, providerCapabilities, ProviderError, type ProviderEnvironment } from './providers.ts';
 
@@ -228,7 +228,7 @@ export function createServer(options: ServerOptions = {}) {
     lastAIAt = Date.now();
     try {
       const prompt = message?.text || 'O chat está quieto. Faça um comentário espontâneo breve sobre seu estado ou o que aconteceu recentemente, sem repetir a última fala.';
-      let actions = provider === 'demo' ? [localReply(prompt)] : await generateActions(state, prompt, env, options.fetchImpl, shutdown.signal);
+      let actions = provider === 'demo' ? [localReply(prompt)] : await generateActions(state, prompt, env, options.fetchImpl, shutdown.signal, message);
       if (closed || generation !== aiGeneration || state.paused || !state.settings.aiEnabled || automatic && state.settings.mode === 'manual') throw new ProviderError('Resposta descartada: a operação ou configuração da IA mudou durante a requisição.', 409);
       if(spontaneous){
         if(state.interaction||state.movement||state.speaking||state.speechQueue.length||state.chat.at(-1)?.id!==chatAtRequest)throw new ProviderError('Comentário espontâneo descartado: uma interação recebeu prioridade.',409);
@@ -236,21 +236,25 @@ export function createServer(options: ServerOptions = {}) {
         const line=String((actions[0]as {text?:string})?.text||'').trim().toLocaleLowerCase('pt-BR');
         if(!line||state.memory.slice(-10).some(m=>m.toLocaleLowerCase('pt-BR').includes(line)))throw new ProviderError('Comentário espontâneo repetido descartado sem gerar voz.',409);
       }
+      if(provider!=='demo'){try{actions=validateDecision(actions,state)}catch{throw new ProviderError('Decisão da IA rejeitada: capacidade, parâmetros ou estado não autorizados.',422)}}
       // Validate an entire response against a clone before any real mutations.
       const preview = structuredClone(state);
       for (const action of actions) {
+        if(isQueuedAction(action as Action))continue;
         const result = applyAction(preview, action, Date.now());
         if (!result.ok) throw new ProviderError(`Ação da IA rejeitada pelo motor: ${result.error || 'ação inválida'}`);
       }
       if (state.paused || !state.settings.aiEnabled) throw new ProviderError('Resposta descartada: operação pausada ou IA desativada durante a requisição.', 409);
       for (const action of actions) {
         if (state.settings.mode === 'semi') state.proposals.push({ id: randomUUID(), action: action as LiveState['proposals'][number]['action'], reason: 'Sugestão da IA; aguarda aprovação do operador.',replyTo:message?{...message}:undefined });
+        else if(isQueuedAction(action as Action)){(state.operatorQueue??=[]).push(action as Action);event('ai',`Ação enfileirada: ${JSON.stringify(action)}`);}
         else { const previousIds=new Set(state.speechQueue.map(s=>s.id));const result = applyAction(state, action, Date.now()); if (!result.ok) throw new ProviderError(result.error || 'Ação indisponível.');if(message)for(const speech of state.speechQueue)if(speech.character==='homer'&&!previousIds.has(speech.id)){speech.replyTo={...message};speech.priority=Math.max(speech.priority,message.priority||0);}state.speechQueue.sort((a,b)=>b.priority-a.priority); }
       }
       state.proposals = state.proposals.slice(-20);
       const spoken = actions.filter((a:any)=>a.type==='TALK').map((a:any)=>String(a.text).slice(0,350));
       state.memory.push(`${message ? 'Chat: '+message.text.slice(0,140) : 'Comentário espontâneo'} · ${state.settings.mode === 'semi' ? 'Sugestão ainda não executada' : 'Homer'}: ${spoken.join(' ')}`);
       state.memory=state.memory.slice(-30);
+      if(state.settings.mode!=='semi')rememberExchange(state,message,spoken.join(' '));
       if (message) { message.selected = false; processedMessages.add(message.id); }
       providerError = null;
       event('ai', provider === 'demo' ? 'Resposta produzida pelo banco local de demonstração.' : 'Resposta recebida da API e validada pelo motor.');
@@ -306,7 +310,7 @@ export function createServer(options: ServerOptions = {}) {
       try {
         tick(state, now, elapsed);
         if (!state.paused && !state.interaction && state.settings.mode !== 'manual' && state.settings.aiEnabled && state.settings.provider === 'openai-compatible' && !aiBusy && now - lastAIAt >= state.settings.responseCooldown * 1000) {
-          const selected = state.chat.filter(m => !(m.source!=='tiktok'&&operatorIntent(m.text)) && (m.selected||state.settings.mode==='auto') && now-m.at<180000 && !processedMessages.has(m.id)).sort((a,b)=>(b.priority||0)-(a.priority||0))[0];
+          const selected = state.chat.filter(m => (m.selected||state.settings.mode==='auto') && now-m.at<180000 && !processedMessages.has(m.id)).sort((a,b)=>(b.priority||0)-(a.priority||0))[0];
           if (selected) { void respond(selected.id, true).catch(() => undefined); }
           else if (shouldComment(state, now, lastAIAt, boot)) void respond(undefined, true).catch(() => undefined);
         }

@@ -14,7 +14,7 @@ const id=z.string().min(1).max(100).regex(/^[\p{L}\p{N}_:.-]+$/u);
 const text=z.string().trim().min(1).max(500);
 const bounded=(min:number,max:number)=>z.number().finite().min(min).max(max);
 const vec=z.tuple([bounded(-250,250),bounded(-20,50),bounded(-250,250)]);
-export const SettingsSchema=z.object({gameOverlay:z.boolean().optional(),mode:z.enum(['manual','semi','auto']),autoCamera:z.boolean(),aiEnabled:z.boolean(),familyEnabled:z.boolean(),eventsEnabled:z.boolean(),quality:z.enum(['low','medium','high']),adaptiveQuality:z.boolean(),masterVolume:bounded(0,1),effectsVolume:bounded(0,1),familyMin:bounded(30,1800),familyMax:bounded(30,3600),responseCooldown:bounded(5,600),cameraInterval:bounded(8,300),timeMode:z.enum(['real','accelerated','fixed']),timeScale:bounded(0.1,3600),retentionDays:bounded(1,90).int(),cleanOverlay:z.boolean(),provider:z.enum(['demo','openai-compatible']),ttsProvider:z.enum(['browser','openai-compatible','silent'])}).strict();
+export const SettingsSchema=z.object({aiCommands:z.boolean().optional(),gameOverlay:z.boolean().optional(),mode:z.enum(['manual','semi','auto']),autoCamera:z.boolean(),aiEnabled:z.boolean(),familyEnabled:z.boolean(),eventsEnabled:z.boolean(),quality:z.enum(['low','medium','high']),adaptiveQuality:z.boolean(),masterVolume:bounded(0,1),effectsVolume:bounded(0,1),familyMin:bounded(30,1800),familyMax:bounded(30,3600),responseCooldown:bounded(5,600),cameraInterval:bounded(8,300),timeMode:z.enum(['real','accelerated','fixed']),timeScale:bounded(0.1,3600),retentionDays:bounded(1,90).int(),cleanOverlay:z.boolean(),provider:z.enum(['demo','openai-compatible']),ttsProvider:z.enum(['browser','openai-compatible','silent'])}).strict();
 const cameraSchema=z.object({id,name:z.string().trim().min(1).max(100),room:id,position:vec,target:vec,fov:bounded(20,95),type:z.enum(['frontal','wide','reaction','first-person','environment','follow']),transition:z.enum(['cut','smooth','fade'])}).strict();
 export const ActionSchema=z.discriminatedUnion('type',[
  z.object({type:z.literal('IRL'),enabled:z.boolean()}).strict(),
@@ -256,19 +256,19 @@ export function applyAction(state:LiveState,value:unknown,now=Date.now()):{ok:bo
   case 'ADD_CAMERA':if(!safeCamera(action.camera))return {ok:false,error:'Posicione a câmera dentro do cômodo, afastada das paredes.'};if(state.cameras.some(c=>c.id===action.camera.id))return {ok:false,error:'ID de câmera já utilizado.'};state.cameras.push(action.camera);break;
   case 'ADD_LINE':if(state.lines.some(l=>l.id===action.line.id))return {ok:false,error:'ID de fala já utilizado.'};if(state.lines.length>=5000)return {ok:false,error:'Limite de 5.000 falas atingido.'};state.lines.push(action.line);break;
   case 'CHAT':{
-   if(action.source!=='tiktok'&&operatorIntent(action.text)&&(state.operatorQueue?.length||0)>=8)return {ok:false,error:'Fila de ações cheia.'};
+   if(state.settings.provider==='demo'&&action.source!=='tiktok'&&operatorIntent(action.text)&&(state.operatorQueue?.length||0)>=8)return {ok:false,error:'Fila de ações cheia.'};
    const key=action.user.toLowerCase();if(now-(rt.lastChat.get(key)??-Infinity)<2000)return {ok:false,error:'Aguarde dois segundos entre mensagens.'};
    if(state.chat.slice(-15).some(m=>m.user.toLowerCase()===key&&m.text===action.text&&now-m.at<60000))return {ok:false,error:'Mensagem repetida. Aguarde um minuto.'};
    rt.lastChat.set(key,now);if(rt.lastChat.size>500)rt.lastChat.delete(rt.lastChat.keys().next().value!);
    state.chat.push({id:uid('chat',now),user:action.user,text:action.text,at:now,source:action.source??'local',selected:state.settings.mode==='auto',avatarUrl:action.avatarUrl});state.chat=state.chat.slice(-80);
-   if(action.source!=='tiktok'){const intent=operatorIntent(action.text);if(intent){if((state.operatorQueue?.length||0)>=8)return {ok:false,error:'Fila de ações cheia.'};(state.operatorQueue??=[]).push(intent);const m=state.chat.at(-1)!;m.selected=false;rt.responses.add(m.id);logEvent(state,'operator',`Pedido enfileirado: ${action.text}`,now);}}
+   if(state.settings.provider==='demo'&&action.source!=='tiktok'){const intent=operatorIntent(action.text);if(intent){if((state.operatorQueue?.length||0)>=8)return {ok:false,error:'Fila de ações cheia.'};(state.operatorQueue??=[]).push(intent);const m=state.chat.at(-1)!;m.selected=false;rt.responses.add(m.id);logEvent(state,'operator',`Pedido enfileirado: ${action.text}`,now);}}
    if(state.game?.status==='playing')submitGameInput(state.game,action.text.replace(/^!(?:letra|resposta|voto)\s+/i,''),action.user,now);break;
   }
   case 'SELECT_CHAT':{const message=state.chat.find(m=>m.id===action.messageId);if(!message)return {ok:false,error:'Mensagem não encontrada.'};message.selected=true;break;}
   case 'GAME_INPUT':if(!state.game)return {ok:false,error:'Inicie um jogo primeiro.'};result=submitGameInput(state.game,action.value,action.user,now);break;
   case 'APPROVE_PROPOSAL':{const proposal=state.proposals.find(p=>p.id===action.id);if(!proposal)return {ok:false,error:'Sugestão não encontrada.'};state.proposals=state.proposals.filter(p=>p.id!==action.id);const previousIds=new Set(state.speechQueue.map(s=>s.id));result=applyAction(state,proposal.action,now);if(result.ok&&proposal.replyTo)for(const speech of state.speechQueue)if(speech.character==='homer'&&!previousIds.has(speech.id))speech.replyTo={...proposal.replyTo};break;}
   case 'SET_TIME':state.virtualHour=action.hour%24;break;
-  case 'CLEAR_MEMORY':state.memory=[];state.chat=[];rt.responses.clear();logEvent(state,'memory','Memória de conversa apagada pelo operador.',now);break;
+  case 'CLEAR_MEMORY':state.conversations=[];state.memory=[];state.chat=[];rt.responses.clear();logEvent(state,'memory','Memória de conversa apagada pelo operador.',now);break;
  }
  if(result.ok)state.version++;return result;
 }
@@ -307,7 +307,7 @@ function localResponse(state:LiveState,now:number){
  if(rt.responses.size>160)rt.responses=new Set(state.chat.filter(m=>m.selected).map(m=>m.id));
 }
 function autonomousDecision(state:LiveState,now:number){
- const rt=runtime(state,now);if(now-rt.lastDecision<60000||state.interaction||state.movement||state.speaking||state.game?.status==='playing')return;
+ const rt=runtime(state,now);if(state.operatorQueue?.length||now-rt.lastDecision<60000||state.interaction||state.movement||state.speaking||state.game?.status==='playing')return;
  rt.lastDecision=now;
  let action:Action;let reason:string;
  if(state.homer.hunger>72&&state.room!=='kitchen'){action={type:'MOVE_TO_ROOM',room:'kitchen'};reason='Homer está com fome.';}
@@ -329,11 +329,12 @@ export function tick(state:LiveState,now=Date.now(),dtMs=1000):void{
  state.homer.energy=clamp(state.homer.energy+dt*(sleeping?.12:-.012));state.homer.hunger=clamp(state.homer.hunger+dt*.018);
  state.homer.sleep=clamp(state.homer.sleep+dt*(sleeping?-.14:state.virtualHour>21||state.virtualHour<6?.025:.006));
  state.homer.attention=clamp(state.homer.energy*.65+state.homer.mood*.35);
+ if(state.conversations)state.conversations=state.conversations.filter(t=>now-t.at<3600000);
  if(state.movement&&now>=state.movement.startedAt+state.movement.duration){
   state.room=state.movement.to;state.characters.homer.room=state.room;state.characters.homer.activity='idle';state.movement=null;
   state.cameraId=state.cameras.find(c=>c.room===state.room&&c.type==='wide')?.id??state.cameraId;rt.lastCamera=now;logEvent(state,'movement',`Homer chegou: ${ROOMS.find(r=>r.id===state.room)!.name}`,now);
  }
- if(state.operatorQueue?.length&&!state.interaction&&!state.movement&&!state.speaking&&!state.irl){const next=state.operatorQueue[0];if(next.type==='INTERACT_WITH_OBJECT'&&state.room!=='living')move(state,'living',now);else{state.operatorQueue.shift();if(!(next.type==='MOVE_TO_ROOM'&&next.room===state.room)){const result=applyAction(state,next,now);if(!result.ok)logEvent(state,'error',result.error||'Pedido indisponível.',now);}}}
+ if(state.operatorQueue?.length&&!state.interaction&&!state.movement&&!state.speaking&&!state.speechQueue.length&&!state.irl){const next=state.operatorQueue[0];const required=next.type==='INTERACT_WITH_OBJECT'?(next.object==='fridge'?'kitchen':'living'):undefined;if(required&&state.room!==required){const preparation=move(state,required,now);if(!preparation.ok){state.operatorQueue.shift();logEvent(state,'error',preparation.error||'Preparação do pedido falhou.',now);}}else{state.operatorQueue.shift();if(!(next.type==='MOVE_TO_ROOM'&&next.room===state.room)){const result=applyAction(state,next,now);logEvent(state,result.ok?'action-result':'error',result.ok?`Ação iniciada pelo motor: ${JSON.stringify(next)}`:result.error||'Pedido indisponível.',now);}}}
  if(state.irl&&!state.interaction){const tour=state.irl;state.room=tourPose(now-tour.startedAt,tour.plan).room;state.characters.homer.room=state.room;if(now-tour.startedAt>=(tour.plan?.duration||IRL_DURATION)){state.room='living';state.characters.homer.room='living';if(tour.pendingDonuts){tour.pendingDonuts--;state.interaction={id:uid('donut',now),kind:'donut',startedAt:now,duration:DONUT_DURATION};tour.startedAt=now+DONUT_DURATION;}else if(!tour.enabled){state.irl=undefined;rt.lastCamera=now;}else {tour.startedAt=now;tour.stopIndex=(tour.stopIndex||0)+1;prepareIRLTour(state);}}}
  if(state.interaction){state.room=donutPose(now-state.interaction.startedAt).room;state.characters.homer.room=state.room;}
  if(state.interaction&&now>=state.interaction.startedAt+state.interaction.duration){const wasWater=state.interaction.kind==='water';state.interaction=undefined;state.room='living';state.characters.homer.room='living';rt.lastCamera=now;if(wasWater)say(state,'homer','Ahhh! Até que água é boa. Só não tem cobertura de chocolate.',now,4);if(!wasWater)state.homer.hunger=clamp(state.homer.hunger-15);logEvent(state,'object',wasWater?'Homer bebeu água e voltou ao seu lugar.':'Homer pegou a rosquinha e voltou ao seu lugar.',now);}
