@@ -12,6 +12,8 @@ O clique libera o áudio nesta janela, conecta o TikTok e seleciona IA externa, 
 
 Se faltar configuração, o sistema lista os campos e não troca silenciosamente para demonstração. A sequência de fallback existente permanece: Fish, secundário configurado, navegador como último recurso; alternativas podem ter outro timbre, informado no diagnóstico de áudio. Não há voz oficial embutida.
 
-O botão não abre uma live no TikTok, não dispensa a configuração inicial e não implementa reconexão automática. O conector é comunitário e pode exigir acesso ao serviço de assinatura. Mantenha áudio em apenas uma janela para evitar eco. Navegadores exigem interação para liberar som, por isso existe o clique inicial.
+O botão não abre uma live no TikTok, não dispensa a configuração inicial e usa reconexão automática limitada após falhas do conector (até oito tentativas com espera crescente). Desconectar manualmente cancela as tentativas. O conector é comunitário e pode exigir acesso ao serviço de assinatura. Mantenha áudio em apenas uma janela para evitar eco. Navegadores exigem interação para liberar som, por isso existe o clique inicial.
 
 O `.env.example` já contém `FISH_REFERENCE_ID_HOMER=fdfc92bf6c584d1dbefa61fddbb66db8`, identificado no catálogo público como [Homer Simpson PT BR, por Caio Rosa](https://fish.audio/m/fdfc92bf6c584d1dbefa61fddbb66db8/). Acesso pela API, qualidade e licença não foram verificados. Esse identificador é público, não uma chave secreta. Se o seu `.env` já existe, atualize somente esse campo: o iniciador preserva o arquivo existente.
+
+Em Configurações há diagnóstico, limites de consumo e memória individual. Veja [Operação da live](LIVE-OPERATIONS.md) para os limites e a votação IRL.

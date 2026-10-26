@@ -226,3 +226,19 @@ test('one-click startup refuses incomplete configuration without switching to de
  assert.deepEqual(f.server.state.settings,before);
  }finally{await f.close()}
 });
+
+test('live diagnostics and consumption controls report real state and block paid work at limits',async()=>{
+ let calls=0;const f=await fixture({env:{AI_API_KEY:'mock-only',TTS_PRIMARY:'fish',FISH_API_KEY:'fake',FISH_REFERENCE_ID_HOMER:'fake-voice'},fetchImpl:async()=>{calls++;return Response.json({choices:[{message:{content:'{"actions":[{"type":"TALK","character":"homer","text":"Olá!"}]}'}}]})}});
+ try{
+ await post(`${f.url}/api/action`,{type:'SETTINGS',settings:{provider:'openai-compatible',aiRequestLimit:0,ttsRequestLimit:0}});
+ assert.equal((await post(`${f.url}/api/ai/respond`,{})).status,429);
+ assert.equal((await post(`${f.url}/api/tts`,{text:'Teste',character:'homer'})).status,429);assert.equal(calls,0);
+ const d=await(await fetch(`${f.url}/api/live/diagnostics`)).json();assert.equal(d.usage.ai,0);assert.equal(d.voice.fishVoice,'fake-voice');assert.equal(d.chat.status,'desconectado');assert.match(d.ai.error,/Limite/);
+ assert.equal((await post(`${f.url}/api/usage/reset`,{})).status,409);
+ await post(`${f.url}/api/action`,{type:'PAUSE',paused:true});assert.equal((await post(`${f.url}/api/usage/reset`,{})).status,200);
+ const memory=await(await fetch(`${f.url}/api/viewer-memory`)).json();assert.deepEqual(memory.viewers,[]);
+ assert.equal((await fetch(`${f.url}/api/viewer-memory?key=invalid`,{method:'DELETE'})).status,400);
+ f.server.state.memory.push('Chat: lembre que gosto de pizza');f.server.state.conversations=[{participant:'tiktok:'+ 'a'.repeat(64),question:'pizza',answer:'ok',at:Date.now()}];
+ assert.equal((await fetch(`${f.url}/api/viewer-memory?key=${'a'.repeat(64)}`,{method:'DELETE'})).status,200);assert.equal(f.server.state.memory.length,0);assert.equal(f.server.state.conversations.length,0);
+ }finally{await f.close()}
+});

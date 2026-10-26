@@ -1,3 +1,5 @@
+import {UsageMeter,UsageLimitError} from './usage.ts';
+import {feeling} from '../shared/mood.ts';
 import {liveRequirements,activateLiveConversation} from './liveStartup.ts';
 import {validateDecision,isQueuedAction,rememberExchange} from './brain.ts';
 import {TikTokBridge,GIFTS} from './tiktok';
@@ -85,8 +87,9 @@ export function createServer(options: ServerOptions = {}) {
   const dataDir = resolve(options.dataDir || env.DATA_DIR || 'data');
   const db = new StateDatabase(options.databasePath || join(dataDir, 'homer.sqlite'));
   const state = recoverState(db.load(), createInitialState());
+  const usage=new UsageMeter(db.loadUsage(),()=>state.settings,u=>db.saveUsage(u));
   const shutdown = new AbortController();
-  const audio = new AudioProvider(join(dataDir, 'audio-cache'), env, options.fetchImpl, shutdown.signal, message=>{ttsStatus=message;event('audio',message);broadcast();});
+  const audio = new AudioProvider(join(dataDir, 'audio-cache'), env, options.fetchImpl, shutdown.signal, message=>{ttsStatus=message;event('audio',message);broadcast();},(kind,characters)=>usage.reserve(kind,characters));
   const app = express();
   const httpServer = createHttpServer(app);
   const wss = new WebSocketServer({ noServer: true, maxPayload: 1024 });
@@ -104,7 +107,9 @@ export function createServer(options: ServerOptions = {}) {
   let aiGeneration = 0;
   let publicGame: { sourceId: string; id: string } | null = null;
   let lastAIAt = 0;
+  let lastAISuccess:number|null=null;
   let lastTick = Date.now();
+  let lastViewerPrune=0;
   let persistenceError: string | null = null;
   let providerError: string | null = null;
   let ttsStatus: string | null = null;
@@ -195,8 +200,12 @@ export function createServer(options: ServerOptions = {}) {
   app.get('/api/state', (_req, res) => res.json(publicState()));
   app.get('/api/diagnostics', async (_req, res) => res.json({ uptimeSeconds: Math.floor((Date.now() - boot) / 1000), websocketClients: wss.clients.size, database: db.stats(), providers: capabilities, audioCache: await audio.stats(), aiBusy, lastProviderError: providerError, persistenceError, processMemoryMB: Math.round(process.memoryUsage().rss / 1_048_576) }));
   app.get('/api/history', (_req, res) => res.json({ events: db.recentEvents() }));
-  const tiktok=new TikTokBridge(state,env,broadcast);
-  app.get('/api/tiktok/status',(_req,res)=>res.json(tiktok.info()));
+  const tiktok=new TikTokBridge(state,env,broadcast,(key,user,text)=>{if(state.settings.viewerMemory!==false){try{db.rememberViewer(key,user,text,state.settings.viewerRetentionDays??7)}catch{event('error','Não foi possível salvar a memória do espectador; o chat continua disponível.')}}});
+  app.get('/api/live/diagnostics',(_req,res)=>res.json({chat:tiktok.info(),ai:{configured:capabilities.ai.configured,provider:state.settings.provider,status:state.settings.provider==='demo'?state.providers.ai:providerError?'Falha na última resposta':lastAISuccess?'Resposta real da API recebida':state.providers.ai,lastSuccess:lastAISuccess,error:providerError,busy:aiBusy},voice:{configured:capabilities.tts.configured,provider:state.settings.ttsProvider,fishVoice:capabilities.tts.fishVoice,status:state.providers.tts},usage:usage.info(),feeling:feeling(state),paused:state.paused,mode:state.settings.mode,requirements:liveRequirements(env)}));
+  app.get('/api/viewer-memory',(_req,res)=>{db.pruneViewers(state.settings.viewerRetentionDays??7);res.json({enabled:state.settings.viewerMemory!==false,viewers:db.viewers()});});
+  app.delete('/api/viewer-memory', (req,res)=>{const key=req.query.key;if(key!==undefined&&(typeof key!=='string'||!/^[a-f0-9]{64}$/.test(key)))return res.status(400).json({error:'Identificador inválido.'});db.clearViewers(key as string|undefined);state.conversations=(state.conversations||[]).filter(t=>key?t.participant!==`tiktok:${key}`:!t.participant.startsWith('tiktok:'));state.chat=state.chat.filter(m=>key?m.viewerKey!==key:m.source!=='tiktok');state.memory=state.memory.filter(m=>!/^Chat(?::| comentou:)/.test(m));aiGeneration++;broadcast();res.json({ok:true});});
+  app.post('/api/usage/reset',(_req,res)=>{if(!state.paused||aiBusy||audio.busy)return res.status(409).json({error:'Pause a operação e aguarde as requisições terminarem antes de iniciar nova contagem.'});usage.reset();res.json({ok:true,usage:usage.info()});});
+  app.get('/api/tiktok/status' ,(_req,res)=>res.json(tiktok.info()));
   let startingLive=false;
   app.post('/api/live/start',async(_req,res)=>{
     const missing=liveRequirements(env);
@@ -205,6 +214,7 @@ export function createServer(options: ServerOptions = {}) {
     startingLive=true;const generation=aiGeneration;
     try{
       if(tiktok.info().status!=='conectado')await tiktok.start();
+      if(tiktok.info().status!=='conectado')throw new Error('TikTok ainda não conectado');
       if(closed||generation!==aiGeneration)return res.status(409).json({error:'Inicialização cancelada: o operador alterou a operação.'});
       activateLiveConversation(state);aiGeneration++;event('system','Conversa automática ativada com IA externa e Fish Audio principal.');broadcast();schedulePersist();
       return res.json({ok:true,message:'TikTok conectado. IA automática e voz principal selecionadas; provedores pagos ainda não testados.'});
@@ -218,10 +228,11 @@ export function createServer(options: ServerOptions = {}) {
   app.post('/api/action', (req, res) => {
     const result = applyAction(state, req.body, Date.now());
     if (result.ok) {
-      if (req.body?.type === 'PAUSE' || req.body?.type === 'SETTINGS' && ['mode', 'provider', 'aiEnabled'].some(key => key in (req.body.settings || {}))) aiGeneration++;
+      if (req.body?.type === 'PAUSE' || req.body?.type === 'SETTINGS' && ['mode', 'provider', 'aiEnabled', 'viewerMemory'].some(key => key in (req.body.settings || {}))) aiGeneration++;
       if (req.body?.type === 'CLEAR_MEMORY') {
+        aiGeneration++;
         state.logs = state.logs.filter(entry => entry.type === 'memory').slice(0, 1);
-        db.clearHistory(); persist();
+        db.clearHistory();db.clearViewers(); persist();
       }
       broadcast();
     }
@@ -243,7 +254,10 @@ export function createServer(options: ServerOptions = {}) {
     lastAIAt = Date.now();
     try {
       const prompt = message?.text || 'O chat está quieto. Faça um comentário espontâneo breve sobre seu estado ou o que aconteceu recentemente, sem repetir a última fala.';
-      let actions = provider === 'demo' ? [localReply(prompt)] : await generateActions(state, prompt, env, options.fetchImpl, shutdown.signal, message);
+      db.pruneViewers(state.settings.viewerRetentionDays??7);
+      const viewer=state.settings.viewerMemory!==false&&message?.viewerKey?db.viewer(message.viewerKey):undefined;
+      if(provider!=='demo'){if(!capabilities.ai.configured)throw new ProviderError('IA externa não configurada.',503);try{usage.reserve('ai')}catch(e){if(e instanceof UsageLimitError)throw new ProviderError(e.message,429);throw e}}
+      let actions = provider === 'demo' ? [localReply(prompt)] : await generateActions(state, prompt, env, options.fetchImpl, shutdown.signal, message, viewer);
       if (closed || generation !== aiGeneration || state.paused || !state.settings.aiEnabled || automatic && state.settings.mode === 'manual') throw new ProviderError('Resposta descartada: a operação ou configuração da IA mudou durante a requisição.', 409);
       if(spontaneous){
         if(state.interaction||state.movement||state.speaking||state.speechQueue.length||state.chat.at(-1)?.id!==chatAtRequest)throw new ProviderError('Comentário espontâneo descartado: uma interação recebeu prioridade.',409);
@@ -272,6 +286,7 @@ export function createServer(options: ServerOptions = {}) {
       if(state.settings.mode!=='semi')rememberExchange(state,message,spoken.join(' '));
       if (message) { message.selected = false; processedMessages.add(message.id); }
       providerError = null;
+      if(provider!=='demo')lastAISuccess=Date.now();
       event('ai', provider === 'demo' ? 'Resposta produzida pelo banco local de demonstração.' : 'Resposta recebida da API e validada pelo motor.');
       broadcast();
       return { ok: true, source: provider, actions: actions.length };
@@ -324,6 +339,7 @@ export function createServer(options: ServerOptions = {}) {
       const now = Date.now(); const elapsed = Math.min(5000, now - lastTick); lastTick = now;
       try {
         tick(state, now, elapsed);
+        if(now-lastViewerPrune>60000){db.pruneViewers(state.settings.viewerRetentionDays??7,now);lastViewerPrune=now;}
         if (!state.paused && !state.interaction && state.settings.mode !== 'manual' && state.settings.aiEnabled && state.settings.provider === 'openai-compatible' && !aiBusy && now - lastAIAt >= state.settings.responseCooldown * 1000) {
           const selected = state.chat.filter(m => (m.selected||state.settings.mode==='auto') && now-m.at<180000 && !processedMessages.has(m.id)).sort((a,b)=>(b.priority||0)-(a.priority||0))[0];
           if (selected) { void respond(selected.id, true).catch(() => undefined); }

@@ -1,3 +1,4 @@
+import {idleMood} from './mood';
 import {operatorIntent} from './operatorIntent';
 import {tourPose,makeIRLPlan,IRL_DURATION} from './irl';
 import {DONUT_DURATION,donutPose} from './homerMotion';
@@ -14,7 +15,7 @@ const id=z.string().min(1).max(100).regex(/^[\p{L}\p{N}_:.-]+$/u);
 const text=z.string().trim().min(1).max(500);
 const bounded=(min:number,max:number)=>z.number().finite().min(min).max(max);
 const vec=z.tuple([bounded(-250,250),bounded(-20,50),bounded(-250,250)]);
-export const SettingsSchema=z.object({aiCommands:z.boolean().optional(),gameOverlay:z.boolean().optional(),mode:z.enum(['manual','semi','auto']),autoCamera:z.boolean(),aiEnabled:z.boolean(),familyEnabled:z.boolean(),eventsEnabled:z.boolean(),quality:z.enum(['low','medium','high']),adaptiveQuality:z.boolean(),masterVolume:bounded(0,1),effectsVolume:bounded(0,1),familyMin:bounded(30,1800),familyMax:bounded(30,3600),responseCooldown:bounded(5,600),cameraInterval:bounded(8,300),timeMode:z.enum(['real','accelerated','fixed']),timeScale:bounded(0.1,3600),retentionDays:bounded(1,90).int(),cleanOverlay:z.boolean(),provider:z.enum(['demo','openai-compatible']),ttsProvider:z.enum(['browser','openai-compatible','silent'])}).strict();
+export const SettingsSchema=z.object({viewerMemory:z.boolean().optional(),viewerRetentionDays:bounded(1,30).int().optional(),aiRequestLimit:bounded(0,100000).int().optional(),ttsRequestLimit:bounded(0,100000).int().optional(),budgetUSD:bounded(0,10000).optional(),aiEstimatedPerCall:bounded(0,100).optional(),fishEstimatedPer1k:bounded(0,100).optional(),openaiEstimatedPer1k:bounded(0,100).optional(),aiCommands:z.boolean().optional(),gameOverlay:z.boolean().optional(),mode:z.enum(['manual','semi','auto']),autoCamera:z.boolean(),aiEnabled:z.boolean(),familyEnabled:z.boolean(),eventsEnabled:z.boolean(),quality:z.enum(['low','medium','high']),adaptiveQuality:z.boolean(),masterVolume:bounded(0,1),effectsVolume:bounded(0,1),familyMin:bounded(30,1800),familyMax:bounded(30,3600),responseCooldown:bounded(5,600),cameraInterval:bounded(8,300),timeMode:z.enum(['real','accelerated','fixed']),timeScale:bounded(0.1,3600),retentionDays:bounded(1,90).int(),cleanOverlay:z.boolean(),provider:z.enum(['demo','openai-compatible']),ttsProvider:z.enum(['browser','openai-compatible','silent'])}).strict();
 const cameraSchema=z.object({id,name:z.string().trim().min(1).max(100),room:id,position:vec,target:vec,fov:bounded(20,95),type:z.enum(['frontal','wide','reaction','first-person','environment','follow']),transition:z.enum(['cut','smooth','fade'])}).strict();
 export const ActionSchema=z.discriminatedUnion('type',[
  z.object({type:z.literal('IRL'),enabled:z.boolean()}).strict(),
@@ -58,7 +59,7 @@ export function logEvent(state:LiveState,type:string,message:string,now=Date.now
  state.logs.unshift({id:uid('log',now),at:now,type,message});state.logs=state.logs.slice(0,120);
 }
 export function createInitialState(now=Date.now()):LiveState{
- const settings:Settings={mode:'manual',autoCamera:true,aiEnabled:true,familyEnabled:true,eventsEnabled:true,quality:'medium',adaptiveQuality:true,masterVolume:.7,effectsVolume:.3,familyMin:180,familyMax:360,responseCooldown:15,cameraInterval:25,timeMode:'fixed',timeScale:60,retentionDays:7,cleanOverlay:false,provider:'demo',ttsProvider:'browser'};
+ const settings:Settings={viewerMemory:true,viewerRetentionDays:7,aiRequestLimit:300,ttsRequestLimit:600,mode:'manual',autoCamera:true,aiEnabled:true,familyEnabled:true,eventsEnabled:true,quality:'medium',adaptiveQuality:true,masterVolume:.7,effectsVolume:.3,familyMin:180,familyMax:360,responseCooldown:15,cameraInterval:25,timeMode:'fixed',timeScale:60,retentionDays:7,cleanOverlay:false,provider:'demo',ttsProvider:'browser'};
  const characters=Object.fromEntries((['homer','marge','bart','lisa','maggie'] as CharacterId[]).map(id=>[id,{id,name:id[0].toUpperCase()+id.slice(1),enabled:true,expression:'neutral',activity:'sitting',room:'living',volume:id==='maggie'?.35:.8}])) as LiveState['characters'];
  const state:LiveState={version:1,layoutRevision:LAYOUT_REVISION,startedAt:now,paused:false,settings,characters,homer:{mood:78,energy:83,hunger:34,sleep:18,attention:85,interest:75,lastFamily:0},room:'living',cameraId:'living-family',cameras:clone(CAMERAS),speaking:null,speechQueue:[],chat:[],logs:[],events:clone(EVENTS),lines:clone(LINES),game:null,movement:null,virtualHour:17.5,weather:'clear',power:true,tvChannel:0,doors:{},memory:[],proposals:[],providers:{ai:'Regras locais · sem conexão com IA',tts:'Voz do navegador · requer ativação de áudio'},nextFamilyAt:now+240000};
  logEvent(state,'system','Estúdio iniciado. Chat de teste local; integrações externas não conectadas.',now);return state;
@@ -217,7 +218,7 @@ export function applyAction(state:LiveState,value:unknown,now=Date.now()):{ok:bo
   case 'REACT':state.characters[action.character].expression=action.expression;break;
   case 'CHANGE_CAMERA':if(!state.cameras.some(c=>c.id===action.cameraId))return {ok:false,error:'Câmera inexistente.'};state.cameraId=action.cameraId;rt.lastCamera=now;break;
   case 'MOVE_TO_ROOM':if(state.interaction)return {ok:false,error:'Aguarde a interação com a rosquinha terminar.'};result=move(state,action.room,now);break;
-  case 'START_GAME':if(state.game?.status==='playing')return {ok:false,error:'Encerre a rodada atual primeiro.'};state.game=createGame(action.game,now);state.tvChannel=4;logEvent(state,'game',`Começou: ${state.game.title}`,now);break;
+  case 'START_GAME':if(state.game?.status==='playing')return {ok:false,error:'Encerre a rodada atual primeiro.'};state.game=createGame(action.game,now);if(action.game==='poll'&&state.irl?.enabled){const rooms=ROOMS.filter(r=>r.id!=='living'&&r.id!==state.irl?.plan?.destination);const offset=(state.irl.stopIndex||0)%rooms.length;const choices=[0,1,2].map(i=>rooms[(offset+i)%rooms.length]);state.game.roomChoices=choices.map(r=>r.id);state.game.options=choices.map(r=>r.name);state.game.title='Para onde vamos no próximo passeio?';state.game.hint='Vote A, B ou C. O próximo destino começa após o retorno à sala.';state.game.endsAt=now+60000;state.settings.gameOverlay=true;}state.tvChannel=4;logEvent(state,'game',`Começou: ${state.game.title}`,now);break;
   case 'STOP_GAME':if(!state.game)return {ok:false,error:'Nenhum jogo em andamento.'};finishGame(state.game);state.game.status='ended';state.game.result='Encerrado pelo operador.';break;
   case 'PLAY_ANIMATION':if(action.activity==='walking')return {ok:false,error:'Use MOVE_TO_ROOM para caminhar em uma rota válida.'};if(state.movement&&action.character==='homer')return {ok:false,error:'Aguarde o deslocamento terminar.'};state.characters[action.character].activity=action.activity;break;
   case 'INTERACT_WITH_OBJECT':{
@@ -349,9 +350,10 @@ export function tick(state:LiveState,now=Date.now(),dtMs=1000):void{
   rt.gameResult=state.game.id;logEvent(state,'game',state.game.result||'Rodada encerrada.',now);
   if(state.game.type==='poll'&&state.game.score>0&&state.game.result!=='Encerrado pelo operador.') {
    const winner=Object.entries(state.game.votes).sort((a,b)=>b[1]-a[1])[0]?.[0];
-   const action:Action=winner==='0'?{type:'MOVE_TO_ROOM',room:'kitchen'}:winner==='1'?{type:'INTERACT_WITH_OBJECT',object:'tv'}:{type:'INTERACT_WITH_OBJECT',object:'sofa'};
+   if(state.game.roomChoices){const room=state.game.roomChoices[Number(winner)];if(state.irl?.enabled&&ROOMS.some(r=>r.id===room)){state.irl.nextDestination=room;logEvent(state,'game',`Próximo destino IRL escolhido: ${room}`,now);}else logEvent(state,'game','Votação encerrada; passeio IRL não está ativo.',now);}
+   else {const action:Action=winner==='0'?{type:'MOVE_TO_ROOM',room:'kitchen'}:winner==='1'?{type:'INTERACT_WITH_OBJECT',object:'tv'}:{type:'INTERACT_WITH_OBJECT',object:'sofa'};
    if(state.settings.mode==='auto'){const result=applyAction(state,action,now);if(!result.ok)logEvent(state,'game',`Escolha do público não executada: ${result.error}`,now);}
-   else if(state.settings.mode==='semi'){state.proposals.push({id:uid('proposal',now),action,reason:'Atividade escolhida pela votação do público.'});state.proposals=state.proposals.slice(-8);}
+   else if(state.settings.mode==='semi'){state.proposals.push({id:uid('proposal',now),action,reason:'Atividade escolhida pela votação do público.'});state.proposals=state.proposals.slice(-8);}}
   }
  }}
  if(state.irl&&!state.interaction&&state.settings.mode!=='manual'&&state.settings.aiEnabled&&state.settings.provider==='demo')localResponse(state,now);
@@ -362,12 +364,13 @@ export function tick(state:LiveState,now=Date.now(),dtMs=1000):void{
   if(!state.irl&&!state.interaction&&state.settings.autoCamera&&!state.movement&&!state.speaking&&now-rt.lastCamera>=state.settings.cameraInterval*1000){const candidates=state.cameras.filter(c=>c.room===state.room&&c.id!==state.cameraId&&c.type!=='first-person');if(candidates.length)state.cameraId=candidates[Math.floor(Math.random()*candidates.length)].id;rt.lastCamera=now;}
  }
  if(now-rt.lastSummary>=300000){rt.lastSummary=now;const summary=`${new Date(now).toLocaleTimeString('pt-BR')}: ${ROOMS.find(r=>r.id===state.room)!.name}; humor ${Math.round(state.homer.mood)}; ${state.logs.slice(0,3).map(l=>l.message).join(' / ')}`;state.memory.push(summary);state.memory=state.memory.slice(-30);}
+ idleMood(state,now);
  state.version++;
 }
 
 /** Each excursion starts and ends at the existing presenter mark, retaining safe gift handoff. */
 function prepareIRLTour(state:LiveState){
- const tour=state.irl!;const stops=ROOMS.filter(r=>r.id!=='living');const destination=stops[(tour.stopIndex||0)%stops.length].id;
+ const tour=state.irl!;const stops=ROOMS.filter(r=>r.id!=='living');const destination=tour.nextDestination&&stops.some(r=>r.id===tour.nextDestination)?tour.nextDestination:stops[(tour.stopIndex||0)%stops.length].id;delete tour.nextDestination;
  const route=movementWaypoints('living',destination);if(!route)return;
  tour.plan=makeIRLPlan([[-.1,0,1.5],[1.65,0,1.5],[3.7,0,1.8],...route],destination);
  const rooms=findRoomPath('living',destination)!;for(let i=1;i<rooms.length;i++){const id=doorId(rooms[i-1],rooms[i]);if(DOORWAYS[id])state.doors[id]=true;}

@@ -19,7 +19,7 @@ test('SQLite round-trip persists operator settings, custom cameras/lines; raw ch
     applyAction(state, { type: 'ADD_LINE', line: { id: 'custom-line', character: 'homer', category: 'chat', text: 'Uma fala criada pelo operador.' } }, now);
     applyAction(state, { type: 'CHAT', user: 'viewer-handle', text: 'Olá, Homer!' }, now);
     applyAction(state, { type: 'TALK', character: 'homer', text: 'Esta fila não deve ser reproduzida.' }, now);
-    state.memory.push('Chat comentou: texto privado do chat', 'Resumo: Homer visitou a cozinha.');
+    state.memory.push('Chat: pergunta privada · Homer: resposta', 'Chat comentou: texto privado do chat', 'Resumo: Homer visitou a cozinha.');
     state.room = 'kitchen'; state.characters.homer.room = 'kitchen';
     state.events[0].lastRun = now - 1000;
     db.save(state, now); db.close(); db = new StateDatabase(path);

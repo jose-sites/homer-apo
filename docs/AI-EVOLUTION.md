@@ -33,3 +33,7 @@ Voz não foi modificada: selecione Fish Audio → OpenAI e configure `FISH_API_K
 Testes locais com HTTP de IA simulado: continuidade por participante, expiração/limpeza, catálogo enviado ao modelo, variantes de pedidos, rejeição de ações maliciosas, contexto da rosquinha/IRL, fila de fala e movimento/geladeira e fluxo HTTP de pedido local. Os testes de variantes verificam o contrato, não comprovam compreensão semântica de um modelo real.
 
 Nenhuma chamada paga ou conexão TikTok real foi realizada. A qualidade das respostas, gírias, referências entre participantes, comportamento sob volume real e voz precisam ser avaliados em live com credenciais.
+
+## Atualização posterior
+
+A etapa de operação adicionou memória persistente conservadora por ID estável, limites de chamadas/orçamento estimado, diagnóstico, reconexão, humor e votação IRL. Os detalhes atuais estão em [LIVE-OPERATIONS.md](LIVE-OPERATIONS.md). Cache semântico de perguntas, resumos livres e ranking semântico de chat continuam fora desta entrega.
