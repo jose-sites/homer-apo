@@ -16,7 +16,7 @@ export function pointAlong(path:Vec3[],progress:number):{position:Vec3;direction
 export function donutPose(elapsed:number){
  const t=Math.max(0,elapsed),T=DONUT_TIMES;
  const returning=t>=T.return,walking=t>=T.turn&&t<T.arrive||returning&&t<T.home;
- const p=pointAlong(returning?[...DONUT_ROUTE].reverse():DONUT_ROUTE,returning?(t-T.return)/(T.home-T.return):(t-T.turn)/(T.arrive-T.turn));
+ const p=pointAlong(returning?[...DONUT_ROUTE].reverse():DONUT_ROUTE,travelProgress(returning?(t-T.return)/(T.home-T.return):(t-T.turn)/(T.arrive-T.turn)));
  if(t>=T.home)p.position=[...HOMER_HOME];
  if(t<T.turn){const angle=Math.PI/2*smooth(0,T.turn,t);p.direction=[Math.sin(angle),0,Math.cos(angle)];}
  return {...p,walking,phase:t<T.turn?'turn':t<T.arrive?'walk':t<T.pickup?'reach':t<T.eaten?'eat':t<T.return?'settle':t<T.home?'return':'done',held:t>=T.pickup&&t<T.eaten,taken:t>=T.pickup,room:p.position[0]<-5?'kitchen':'living'};
@@ -33,5 +33,7 @@ export function donutCamera(elapsed:number){
  if(elapsed>=DONUT_TIMES.home)return null;
  if(elapsed<8000){const d=pose.direction,n=Math.hypot(d[0],d[2])||1;return {id:'eyes',position:[x,y+1.65,z]as Vec3,target:[x+d[0]/n*2,y+1.6,z+d[2]/n*2]as Vec3,fov:70};}
  if(pose.room==='living')return {id:'door',position:[-3.3,3.15,-.3]as Vec3,target:[-5,1.15,-2.4]as Vec3,fov:80};
- return {id:'kitchen',position:[-6.5,2.45,2.8]as Vec3,target:[-9.65,1,.2]as Vec3,fov:65};
+ return {id:'kitchen',position:[-6.5,2.45,2.8]as Vec3,target:[x,y+1.1,z]as Vec3,fov:70};
 }
+/** Integral of a trapezoidal speed profile: smooth starts/stops without changing duration. */
+export function travelProgress(progress:number){const t=Math.max(0,Math.min(1,progress)),r=.1;return t<r?t*t/(2*r*(1-r)):t>1-r?1-(1-t)*(1-t)/(2*r*(1-r)):(t-r/2)/(1-r);}

@@ -15,14 +15,17 @@ export class AudioDirector {
  private clearMouth(){for(const character of ['homer','marge','bart','lisa','maggie'] as CharacterId[])this.mouth(character,0)}
  private async playSpeech(speech:Speech,state:LiveState,signal:AbortSignal){
   if(!this.currentState?.characters[speech.character].enabled||this.currentState.paused||signal.aborted)return;
-  this.activeSpeech=speech;this.playback(speech,false);try{
+  this.activeSpeech=speech;this.playback(speech,false);
+  const notify=(active:boolean)=>{void fetch('/api/playback',{method:'POST',headers:{'Content-Type':'application/json',...authHeaders()},body:JSON.stringify({speechId:speech.id,active}),signal:AbortSignal.timeout(4000)}).catch(()=>{});};
+  const heartbeat=state.settings.ttsProvider==='silent'?undefined:setInterval(()=>notify(true),3000);if(heartbeat)notify(true);
+  try{
   if(speech.character==='maggie'||speech.effect){this.playback(speech,true);await this.effect(speech.effect||'pacifier',speech.character,signal);return}
   if(state.settings.ttsProvider==='silent')return;
   if(state.settings.ttsProvider==='openai-compatible'){
-   try{const response=await fetch('/api/tts',{method:'POST',headers:{'Content-Type':'application/json',...authHeaders()},body:JSON.stringify({text:speech.text,character:speech.character}),signal:AbortSignal.any([signal,AbortSignal.timeout(65000)])});if(!response.ok)throw new Error('TTS externo indisponível');const buffer=await this.context!.decodeAudioData(await response.arrayBuffer());if(signal.aborted)return;await this.playBuffer(buffer,speech,signal);return}catch(error){if(signal.aborted)return;this.onStatus('TTS externo falhou; usando a voz disponível no navegador.')}
+   try{const response=await fetch('/api/tts',{method:'POST',headers:{'Content-Type':'application/json',...authHeaders()},body:JSON.stringify({text:speech.text,character:speech.character}),signal:AbortSignal.any([signal,AbortSignal.timeout(65000)])});if(!response.ok)throw new Error('TTS externo indisponível');const buffer=await this.context!.decodeAudioData(await response.arrayBuffer());if(signal.aborted)return;this.onStatus(`Em reprodução: ${response.headers.get('X-Homer-TTS-Provider')||'TTS externo'}.`);await this.playBuffer(buffer,speech,signal);return}catch(error){if(signal.aborted)return;this.onStatus('TTS externo falhou; usando a voz disponível no navegador.')}
   }
   await this.browserSpeech(speech,signal);
-  }finally{this.playback(speech,false);if(this.activeSpeech?.id===speech.id)this.activeSpeech=null}
+  }finally{clearInterval(heartbeat);if(heartbeat)notify(false);this.playback(speech,false);if(this.activeSpeech?.id===speech.id)this.activeSpeech=null}
  }
  private browserSpeech(speech:Speech,signal:AbortSignal):Promise<void>{return new Promise((resolve,reject)=>{
   if(signal.aborted){resolve();return}if(!window.speechSynthesis){this.onStatus('Este navegador não oferece síntese de voz. Legendas continuam ativas.');resolve();return}
@@ -30,7 +33,7 @@ export class AudioDirector {
   let timer:ReturnType<typeof setInterval>|undefined;let watchdog:ReturnType<typeof setTimeout>;let done=false;
   const finish=()=>{if(done)return;done=true;clearInterval(timer);clearTimeout(watchdog);signal.removeEventListener('abort',abort);this.mouth(speech.character,0);resolve()};
   const abort=()=>{window.speechSynthesis.cancel();finish()};signal.addEventListener('abort',abort,{once:true});
-  utterance.onstart=()=>{this.playback(speech,true);timer=setInterval(()=>this.mouth(speech.character,0.25+Math.random()*0.7),110)};
+  utterance.onstart=()=>{this.onStatus(`Em reprodução: navegador — ${utterance.voice?.name||'voz padrão'}, não é voz oficial do Homer.`);this.playback(speech,true);timer=setInterval(()=>this.mouth(speech.character,0.25+Math.random()*0.7),110)};
   utterance.onend=finish;utterance.onerror=event=>{finish();if(event.error!=='canceled'&&event.error!=='interrupted')this.onStatus(`Voz do navegador indisponível (${event.error}). Legendas ativas.`)};
   // Browser synthesis exposes no waveform. Mouth motion is an explicitly approximate fallback.
   watchdog=setTimeout(()=>{window.speechSynthesis.cancel();finish()},Math.max(12000,speech.text.length*170));window.speechSynthesis.speak(utterance);

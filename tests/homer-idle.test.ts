@@ -27,3 +27,10 @@ test('Idle voice waits for donut, selected messages, speech queue and active gam
  applyAction(s,{type:'CHAT',user:'viewer',text:'Olá Homer'});s.chat[0].selected=true;assert.equal(shouldComment(s,Date.now()+300000,0,0),false);s.chat=[];
  applyAction(s,{type:'TALK',character:'homer',text:'Salve!'});assert.equal(shouldComment(s,300000,0,0),false);
 });
+
+test('Selfie hand stays anchored during the walk cycle without stretching bones',async()=>{
+ const {GLTFLoader}=await import('three/examples/jsm/loaders/GLTFLoader.js');const {Group,Vector3}=await import('three');const {createHomerRig,stabilizeSelfieArm}=await import('../src/scene/homerRig');
+ const b=readFileSync('public/models/homer/homer.glb'),asset=await new GLTFLoader().parseAsync(b.buffer.slice(b.byteOffset,b.byteOffset+b.byteLength),'');const rig=createHomerRig(asset),root=new Group(),offset=new Group();offset.position.set(...rig.offset);offset.scale.setScalar(rig.scale);offset.add(rig.scene);root.add(offset);
+ for(const t of [0,.3,.7,1.2,1.8,2.4]){rig.restore(rig.rest);rig.mixer.setTime(t);stabilizeSelfieArm(rig,root);const hand=rig.bone('DEF-hand-middle1.L')!.getWorldPosition(new Vector3());assert.ok(hand.distanceTo(new Vector3(.36,1.22,.48))<.035,`hand drift at ${t}`);for(const pose of rig.rest)assert.deepEqual(pose.bone.scale.toArray(),pose.scale.toArray());}
+ rig.mixer.stopAllAction();rig.mixer.uncacheRoot(rig.scene);
+});

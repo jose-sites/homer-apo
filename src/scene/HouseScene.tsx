@@ -1,3 +1,4 @@
+import {constrainSelfie} from './cameraSafety';
 import {tourPose} from '../../shared/irl';
 import {donutCamera} from '../../shared/homerMotion';
 import { Suspense, useEffect, useRef, useState, useMemo } from 'react';
@@ -69,7 +70,7 @@ function Director({state,explore,onCameraPose,onFade}:{state:LiveState;explore:b
  useEffect(()=>{const preset=state.cameras.find(c=>c.id===state.cameraId)||CAMERAS[0];if(currentId.current===preset.id)return;const next=new Vector3(...preset.position),nextTarget=new Vector3(...preset.target);
  const cut=preset.transition==='cut'||!currentId.current;const crossesRoom=lastRoom.current&&lastRoom.current!==preset.room;
  if(cut){camera.position.copy(next);target.current.copy(nextTarget);(camera as PerspectiveCamera).fov=preset.fov;camera.lookAt(target.current);(camera as PerspectiveCamera).updateProjectionMatrix();}
- else if(crossesRoom||preset.transition==='fade'){onFade(true);pending.current={at:performance.now()+190,position:next,target:nextTarget,fov:preset.fov};}
+ else if(crossesRoom||preset.transition==='fade'||currentId.current){onFade(true);pending.current={at:performance.now()+190,position:next,target:nextTarget,fov:preset.fov};}
  destination.current.copy(next);destinationTarget.current.copy(nextTarget);currentId.current=preset.id;lastRoom.current=preset.room;
  },[state.cameraId,state.cameras,camera,onFade]);
  useFrame((_,dt)=>{
@@ -83,7 +84,7 @@ function Director({state,explore,onCameraPose,onFade}:{state:LiveState;explore:b
    if(now>=sequence.at){camera.position.set(...pose.position);target.current.lerp(new Vector3(...pose.target),pose.id==='eyes'?1-Math.exp(-dt*9):1);(camera as PerspectiveCamera).fov=pose.fov;camera.lookAt(target.current);(camera as PerspectiveCamera).updateProjectionMatrix();onFade(false);}
    return;
   }else if(cinematic.current){const saved=cinematic.current.saved;camera.position.set(...saved.position);target.current.set(...saved.target);(camera as PerspectiveCamera).fov=saved.fov;cinematic.current=null;onFade(false);}
-  if(state.irl&&!state.interaction){if(state.paused)return;const p=tourPose(Date.now()-state.irl.startedAt,state.irl.plan),d=new Vector3(...p.direction).normalize(),pos=new Vector3(...p.position);camera.position.lerp(pos.clone().addScaledVector(d,.65).add(new Vector3(0,1.75,0)),1-Math.exp(-dt*5));target.current.copy(pos).add(new Vector3(0,1.35,0));camera.lookAt(target.current);(camera as PerspectiveCamera).fov=85;(camera as PerspectiveCamera).updateProjectionMatrix();return;}
+  if(state.irl&&!state.interaction){if(state.paused)return;const p=tourPose(Date.now()-state.irl.startedAt,state.irl.plan),d=new Vector3(...p.direction).normalize(),pos=new Vector3(...p.position);camera.position.lerp(constrainSelfie(pos.clone().addScaledVector(d,1.9).add(new Vector3(0,1.85,0)),p.room,state.doors),1-Math.exp(-dt*5));const away=camera.position.clone().sub(pos);away.y=0;if(away.length()<1.1){if(away.length()<.01)away.copy(d);away.normalize();camera.position.x=pos.x+away.x*1.1;camera.position.z=pos.z+away.z*1.1;}constrainSelfie(camera.position,p.room,state.doors);target.current.copy(pos).add(new Vector3(0,1.25,0));camera.lookAt(target.current);(camera as PerspectiveCamera).fov=70;(camera as PerspectiveCamera).updateProjectionMatrix();return;}
   if(state.movement){
    if(movementStart.current?.id!==state.movement.startedAt)movementStart.current={id:state.movement.startedAt,at:now,elapsed:Math.max(0,Date.now()-state.movement.startedAt)};
    const m=movementStart.current;if(!state.paused)m.elapsed+=dt*1000;

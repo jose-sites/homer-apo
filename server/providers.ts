@@ -14,7 +14,7 @@ export class ProviderError extends Error {
 export function providerCapabilities(env: ProviderEnvironment) {
   return {
     ai: { configured: !!(env.AI_API_KEY || env.OPENAI_API_KEY), name: (env.AI_API_KEY || env.OPENAI_API_KEY) ? 'OpenAI-compatible' : 'Motor local de demonstração', model: env.AI_MODEL || 'gpt-4o-mini' },
-    tts: {configured:ttsOrder(env).some(p=>configured(env,p)),name:ttsOrder(env).join(' → '),model:env.FISH_MODEL||'s2.1-pro',warnings:configurationWarnings(env)},
+    tts: {configured:ttsOrder(env).some(p=>configured(env,p)),name:ttsOrder(env).join(' → '),model:env.FISH_MODEL||'s2.1-pro',warnings:configurationWarnings(env),fishVoice:env.FISH_REFERENCE_ID_HOMER||env.FISH_REFERENCE_ID||'Não selecionada — configure FISH_REFERENCE_ID_HOMER',openaiVoice:env.TTS_VOICE_HOMER||env.TTS_VOICE||'alloy'},
     chat: { connected: false, name: 'Chat local de teste', platforms: [] as string[] },
   };
 }
@@ -85,6 +85,8 @@ export function localReply(message: string): Action {
 }
 
 export class AudioProvider {
+  private metadata=new WeakMap<Buffer,{provider:string;voice:string}>();
+  describe(buffer:Buffer){return this.metadata.get(buffer)}
   private inFlight = new Map<string, Promise<Buffer>>();
   private chains=new Map<string,Promise<Buffer>>();
   private maxBytes = 64 * 1024 * 1024;
@@ -94,7 +96,7 @@ export class AudioProvider {
     const run=(async()=>{const errors:string[]=[];for(const provider of ttsOrder(this.env)){
       if(this.shutdownSignal?.aborted)throw new ProviderError('Geração cancelada.',503);
       if(!configured(this.env,provider)){errors.push(`${provider}: não configurado`);continue}
-      try{const result=await this.synthesizeOne(text,character,provider);this.onStatus(errors.length?`Voz: ${provider} utilizado após falha do principal.`:`Voz: ${provider} disponível.`);return result}
+      try{const result=await this.synthesizeOne(text,character,provider);this.metadata.set(result,{provider,voice:provider==='fish'?(this.env[`FISH_REFERENCE_ID_${character.toUpperCase()}`]||this.env.FISH_REFERENCE_ID||'não selecionada'):(this.env[`TTS_VOICE_${character.toUpperCase()}`]||this.env.TTS_VOICE||'alloy')});this.onStatus(errors.length?`Voz: ${provider} utilizado após falha do principal.`:`Voz: ${provider} disponível.`);return result}
       catch(error){errors.push(`${provider}: ${error instanceof ProviderError?error.message:'falha de geração'}`)}
     }const message=`TTS indisponível (${errors.join('; ')}). Voz do navegador/legendas disponíveis.`;this.onStatus(message);throw new ProviderError(message,503)})();
     this.chains.set(id,run);try{return await run}finally{this.chains.delete(id)}

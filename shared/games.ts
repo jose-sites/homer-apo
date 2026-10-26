@@ -74,7 +74,7 @@ export function submitGameInput(game:GameState,value:string,user='operador',now=
   if(family.includes(input)){game.score=game.guesses.filter(g=>family.includes(g)).length;game.masked=`${game.score} / 5`;if(game.score===5)game.status='won';}
   else {game.attempts++;if(game.attempts>=game.maxAttempts)game.status='lost';}
  }
- if(game.status==='won'){game.score=game.type==='challenge'?500:Math.max(10,100-game.attempts*10);game.result=game.result||'Boa! O chat acertou.';}
+ if(game.status==='won'){game.winner=user;game.score=game.type==='challenge'?500:Math.max(10,100-game.attempts*10);game.result=game.result||'Boa! O chat acertou.';}
  return {ok:true};
 }
 function optionIndex(input:string,options:string[]){const letter='ABCD'.indexOf(input);if(input.length===1&&letter>=0&&letter<options.length)return letter;return options.findIndex(o=>normalize(o)===input);}

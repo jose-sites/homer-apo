@@ -46,7 +46,7 @@ export function ReferenceKitchen({state,onAction}:{state:LiveState;onAction:(a:A
   <Fridge state={state} onAction={onAction}/>
   <Cylinder p={[0,.94,.3]} r={.46} h={.025} c="#f9c2cd"/>
   {[[-.25,.02],[-.25,.65],[.15,.65]].map(([x,z],i)=><Donut key={i} p={[x,.99,z]} scale={.65}/>)}
-  {(!state.interaction||Date.now()-state.interaction.startedAt<DONUT_TIMES.pickup)&&<Donut p={[.15,1.01,.3]} scale={.8}/>}
+  {(!state.interaction||Date.now()-state.interaction.startedAt<DONUT_TIMES.pickup||(state.interaction.kind==='water'&&Date.now()-state.interaction.startedAt>=24000))&&(state.interaction?.kind==='water'?<Mug p={[.15,.94,.3]} color="#a4def2" liquid="#9cd9ed"/>:<Donut p={[.15,1.01,.3]} scale={.8}/>)}
   <CraftedTable p={[-1,0,.3]} kitchen/>{[-1.9,-.1].map(x=><CraftedChair key={x} p={[x,0,1.65]} r={Math.PI}/>)}<CraftedChair p={[-1,0,-1.12]} r={0}/><CraftedChair p={[-2.9,0,.3]} r={Math.PI/2}/>
   <Rounded p={[-1.3,.99,.25]} s={[.65,.19,.45]} c="#d98e48"/><Box p={[-1.3,1.095,.25]} s={[.55,.025,.38]} c="#f3bd85"/><Mug p={[-.4,.94,.3]} color="#47b6c8"/>
   <Box p={[-4.15,1.35,-3.38]} s={[.7,.45,.5]} c="#378ea4"/><Box p={[-4.2,1.35,-3.11]} s={[.43,.3,.02]} c="#244753"/>

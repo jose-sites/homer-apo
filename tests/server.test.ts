@@ -1,3 +1,4 @@
+import {tick} from '../shared/engine';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtemp, rm } from 'node:fs/promises';
@@ -199,3 +200,5 @@ test('An in-flight idle remark yields to a donut gift before queuing voice',asyn
   assert.ok(f.server.state.interaction);assert.equal(f.server.state.speechQueue.length,0);assert.equal(f.server.state.speaking,null);
  }finally{await f.close();}
 });
+
+test('Playback lease keeps speech alive through TTS generation and releases on end',async()=>{const f=await fixture();try{await post(`${f.url}/api/action`,{type:'TALK',character:'homer',text:'Olá!'});tick(f.server.state,Date.now(),0);const speech=f.server.state.speaking!;assert.ok(speech);const original=speech.duration;assert.equal((await post(`${f.url}/api/playback`,{speechId:speech.id,active:true})).status,200);assert.ok(speech.duration>=10000&&speech.duration>original);await post(`${f.url}/api/playback`,{speechId:'wrong',active:false});assert.ok(speech.duration>=10000);await post(`${f.url}/api/playback`,{speechId:speech.id,active:false});tick(f.server.state,Date.now()+1,0);assert.equal(f.server.state.speaking,null);}finally{await f.close();}});

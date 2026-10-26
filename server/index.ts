@@ -1,3 +1,4 @@
+import {operatorIntent} from '../shared/operatorIntent';
 import {TikTokBridge,GIFTS} from './tiktok';
 import {loadEnvironment,configurationWarnings} from './config.ts';
 import {ROOMS} from '../shared/data';
@@ -265,10 +266,11 @@ export function createServer(options: ServerOptions = {}) {
     if (!parsed.success) { res.status(400).json({ ok: false, error: 'Parâmetros inválidos para a IA.' }); return; }
     try { res.json(await respond(parsed.data.messageId)); } catch (error) { next(error); }
   });
+  app.post('/api/playback',(req,res)=>{const {speechId,active}=req.body||{};if(typeof speechId!=='string'||typeof active!=='boolean')return res.status(400).json({error:'Reprodução inválida'});const speech=state.speaking;if(speech?.id===speechId&&!state.paused){const elapsed=Math.max(0,Date.now()-speech.createdAt);speech.duration=active?Math.min(120000,Math.max(speech.duration,elapsed+10000)):elapsed;broadcast();}res.json({ok:true});});
   app.post('/api/tts', async (req, res, next) => {
     const parsed = ttsBody.safeParse(req.body);
     if (!parsed.success) { res.status(400).json({ ok: false, error: 'Informe personagem válido e texto de 1 a 600 caracteres.' }); return; }
-    try { const buffer = await audio.synthesize(parsed.data.text, parsed.data.character); res.type('audio/mpeg').send(buffer); }
+    try { const buffer = await audio.synthesize(parsed.data.text, parsed.data.character); res.setHeader('X-Homer-TTS-Provider',audio.describe(buffer)?.provider||'unknown');res.type('audio/mpeg').send(buffer); }
     catch (error) { next(error); }
   });
   app.delete('/api/audio-cache', async (_req, res, next) => { try { await audio.clear(); res.json({ ok: true }); } catch (error) { next(error); } });
@@ -304,7 +306,7 @@ export function createServer(options: ServerOptions = {}) {
       try {
         tick(state, now, elapsed);
         if (!state.paused && !state.interaction && state.settings.mode !== 'manual' && state.settings.aiEnabled && state.settings.provider === 'openai-compatible' && !aiBusy && now - lastAIAt >= state.settings.responseCooldown * 1000) {
-          const selected = state.chat.filter(m => m.selected && !processedMessages.has(m.id)).sort((a,b)=>(b.priority||0)-(a.priority||0))[0];
+          const selected = state.chat.filter(m => !(m.source!=='tiktok'&&operatorIntent(m.text)) && (m.selected||state.settings.mode==='auto') && now-m.at<180000 && !processedMessages.has(m.id)).sort((a,b)=>(b.priority||0)-(a.priority||0))[0];
           if (selected) { void respond(selected.id, true).catch(() => undefined); }
           else if (shouldComment(state, now, lastAIAt, boot)) void respond(undefined, true).catch(() => undefined);
         }

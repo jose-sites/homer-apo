@@ -8,8 +8,9 @@ export function createHomerRig(asset:{scene:Object3D;animations:AnimationClip[]}
  const rest=[...bones.values()].map(b=>({bone:b,position:b.position.clone(),quaternion:b.quaternion.clone(),scale:b.scale.clone()}));
  mixer.setTime(asset.animations[0].duration/2);
  const legs=rest.filter(p=>/^DEF-(hips|femur|shin|foot|toes)/.test(p.bone.name)).map(p=>({bone:p.bone,position:p.position.clone().lerp(p.bone.position,.5),quaternion:p.quaternion.clone().slerp(p.bone.quaternion,.5),scale:p.scale.clone().lerp(p.bone.scale,.5)}));
+ const idle=rest.filter(p=>/^DEF-(hips|femur|shin|foot|toes|shoulder|humerus|arm|hand)/.test(p.bone.name)).map(p=>({bone:p.bone,position:p.position.clone().lerp(p.bone.position,.5),quaternion:p.quaternion.clone().slerp(p.bone.quaternion,.5),scale:p.scale.clone()}));
  const restore=(poses:typeof rest)=>{for(const p of poses){p.bone.position.copy(p.position);p.bone.quaternion.copy(p.quaternion);p.bone.scale.copy(p.scale)}};restore(rest);
- return {scene,mixer,rest,legs,restore,scale,offset:[-center.x*scale,-bounds.min.y*scale,-center.z*scale]as Vec3,bone:(name:string)=>bones.get(name.replace(/[._]/g,''))};
+ return {scene,mixer,rest,legs,idle,restore,scale,offset:[-center.x*scale,-bounds.min.y*scale,-center.z*scale]as Vec3,bone:(name:string)=>bones.get(name.replace(/[._]/g,''))};
 }
 export function rotateBoneInWorld(bone:Bone,rotation:Quaternion){
  const parent=bone.parent!.getWorldQuaternion(new Quaternion());bone.quaternion.premultiply(parent.clone().invert().multiply(rotation).multiply(parent));bone.updateWorldMatrix(false,true);
@@ -22,4 +23,13 @@ export function reachWithArm(root:Object3D,hand:Bone,joints:Bone[],target:Vector
   const rotation=new Quaternion().setFromUnitVectors(a.normalize(),b.normalize());rotation.slerp(new Quaternion(),.15);rotateBoneInWorld(joint,rotation);
  }
  root.updateMatrixWorld(true);return hand.getWorldPosition(new Vector3()).distanceTo(target);
+}
+
+/** Fix the selfie hand relative to the body, overriding walk/talk tracks only on that arm. */
+export function stabilizeSelfieArm(rig:ReturnType<typeof createHomerRig>,root:Object3D){
+ const hand=rig.bone('DEF-hand-middle1.L');if(!hand)return;
+ rig.restore(rig.rest.filter(p=>/[._]L(?:[._]|$)/.test(p.bone.name)&&!/DEF-(femur|shin|foot|toes)/.test(p.bone.name)));
+ root.updateMatrixWorld(true);
+ const target=root.localToWorld(new Vector3(.36,1.22,.48));
+ reachWithArm(root,hand,['DEF-arm.L','DEF-humerus.L'].map(rig.bone).filter((b):b is Bone=>!!b),target);
 }
