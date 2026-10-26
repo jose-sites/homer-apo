@@ -1,3 +1,4 @@
+import {liveRequirements,activateLiveConversation} from './liveStartup.ts';
 import {validateDecision,isQueuedAction,rememberExchange} from './brain.ts';
 import {TikTokBridge,GIFTS} from './tiktok';
 import {loadEnvironment,configurationWarnings} from './config.ts';
@@ -196,6 +197,20 @@ export function createServer(options: ServerOptions = {}) {
   app.get('/api/history', (_req, res) => res.json({ events: db.recentEvents() }));
   const tiktok=new TikTokBridge(state,env,broadcast);
   app.get('/api/tiktok/status',(_req,res)=>res.json(tiktok.info()));
+  let startingLive=false;
+  app.post('/api/live/start',async(_req,res)=>{
+    const missing=liveRequirements(env);
+    if(missing.length)return res.status(422).json({error:`Configuração inicial pendente: ${missing.join(', ')}. Preencha o .env e reinicie o servidor.`});
+    if(startingLive||state.interaction||state.movement||state.speaking||state.speechQueue.length||state.operatorQueue?.length||aiBusy)return res.status(409).json({error:'Aguarde a interação atual antes de iniciar.'});
+    startingLive=true;const generation=aiGeneration;
+    try{
+      if(tiktok.info().status!=='conectado')await tiktok.start();
+      if(closed||generation!==aiGeneration)return res.status(409).json({error:'Inicialização cancelada: o operador alterou a operação.'});
+      activateLiveConversation(state);aiGeneration++;event('system','Conversa automática ativada com IA externa e Fish Audio principal.');broadcast();schedulePersist();
+      return res.json({ok:true,message:'TikTok conectado. IA automática e voz principal selecionadas; provedores pagos ainda não testados.'});
+    }catch{return res.status(503).json({error:'Não foi possível conectar. Abra sua live no TikTok e confira usuário e acesso ao conector. Tente novamente.'})}
+    finally{startingLive=false}
+  });
   app.post('/api/tiktok/connect',async(_req,res)=>{try{await tiktok.start();res.json(tiktok.info())}catch(e){res.status(503).json({error:(e as Error).message})}});
   app.post('/api/tiktok/disconnect',(_req,res)=>{tiktok.stop();res.json({ok:true})});
   app.post('/api/tiktok/confirm-end',(req,res)=>res.status(tiktok.confirm(req.body?.id)?200:409).json(tiktok.info()));

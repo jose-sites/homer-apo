@@ -217,3 +217,12 @@ test('semantic local requests bypass keyword demo and queue validated action pla
  assert.equal(f.server.state.speechQueue[0].replyTo?.id,message.id);
  }finally{await f.close()}
 });
+
+test('one-click startup refuses incomplete configuration without switching to demo or connecting',async()=>{
+ const f=await fixture();try{
+ const before=structuredClone(f.server.state.settings);
+ const response=await post(`${f.url}/api/live/start`,{});
+ assert.equal(response.status,422);assert.match((await response.json()).error,/FISH_REFERENCE_ID_HOMER/);
+ assert.deepEqual(f.server.state.settings,before);
+ }finally{await f.close()}
+});
